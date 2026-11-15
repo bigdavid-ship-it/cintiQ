@@ -18,7 +18,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Mobile bottom navigation"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 transform-gpu border-t border-border bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="grid grid-cols-5">
         {ITEMS.map(({ href, label, icon: Icon }) => {

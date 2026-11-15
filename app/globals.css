@@ -20,6 +20,11 @@
   --radius-lg: 14px;
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: var(--color-background);
   color: var(--color-foreground);
