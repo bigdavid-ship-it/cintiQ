@@ -60,7 +60,7 @@ export async function SiteHeader() {
           )}
           {user ? (
             <>
-              <NotificationBell userId={user.id} items={recentNotifications} unreadCount={unreadCount} />
+              <NotificationBell userId={user.id} items={recentNotifications} unreadCount={unreadCount} showPrompt />
               <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex items-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium hover:bg-muted">
                 <ShoppingCart className="size-4" aria-hidden />
                 {cartCount > 0 && (
@@ -82,7 +82,7 @@ export async function SiteHeader() {
 
         {/* Mobile right-side actions: Notifications + Cart near hamburger menu */}
         <div className="flex items-center gap-1 md:hidden">
-          {user && <NotificationBell userId={user.id} items={recentNotifications} unreadCount={unreadCount} />}
+          {user && <NotificationBell userId={user.id} items={recentNotifications} unreadCount={unreadCount} showPrompt />}
           <Link
             href="/cart"
             aria-label={`Shopping cart${cartCount > 0 ? ` (${cartCount} items)` : ""}`}

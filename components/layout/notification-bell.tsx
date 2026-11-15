@@ -56,16 +56,19 @@ export function NotificationBell({
   userId,
   items: initialItems,
   unreadCount: initialUnreadCount,
+  showPrompt = false,
 }: {
   userId: string;
   items: NotificationItem[];
   unreadCount: number;
+  showPrompt?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>(initialItems);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [toast, setToast] = useState<NotificationItem | null>(null);
   const [pushPerm, setPushPerm] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [promptDismissed, setPromptDismissed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const instanceId = useId();
 
@@ -144,6 +147,14 @@ export function NotificationBell({
     return () => clearTimeout(t);
   }, [toast]);
 
+  const enablePhoneAlerts = async () => {
+    const res = await Notification.requestPermission().catch(() => "default" as const);
+    setPushPerm(res);
+    if (res === "granted") {
+      await syncPushSubscription();
+    }
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -160,6 +171,52 @@ export function NotificationBell({
           </span>
         )}
       </button>
+
+      {showPrompt && pushPerm === "default" && !promptDismissed && (
+        <div
+          role="region"
+          aria-label="Enable phone notifications"
+          className="fixed left-4 right-4 top-20 z-40 mx-auto max-w-sm rounded-xl border border-brand/30 bg-card p-3.5 shadow-lg md:left-auto md:right-4"
+        >
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="flex items-start gap-2.5">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+                <Bell className="size-4" aria-hidden />
+              </div>
+              <div className="space-y-0.5">
+                <p className="font-display text-sm font-semibold text-foreground">Turn on phone alerts</p>
+                <p className="text-xs text-muted-foreground">
+                  Get pop-out order &amp; delivery updates even when cintiQ is closed.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPromptDismissed(true)}
+              aria-label="Dismiss notification prompt"
+              className="rounded p-1 text-muted-foreground hover:bg-muted"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPromptDismissed(true)}
+              className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+            >
+              Later
+            </button>
+            <button
+              type="button"
+              onClick={enablePhoneAlerts}
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand/90"
+            >
+              Enable alerts
+            </button>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div
@@ -206,13 +263,7 @@ export function NotificationBell({
               <span className="text-foreground">Get pop-out phone alerts</span>
               <button
                 type="button"
-                onClick={async () => {
-                  const res = await Notification.requestPermission().catch(() => "default" as const);
-                  setPushPerm(res);
-                  if (res === "granted") {
-                    await syncPushSubscription();
-                  }
-                }}
+                onClick={enablePhoneAlerts}
                 className="shrink-0 rounded bg-brand px-2 py-1 font-medium text-white"
               >
                 Enable
