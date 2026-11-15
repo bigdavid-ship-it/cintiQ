@@ -38,6 +38,11 @@ export default async function CheckoutCallback({ searchParams }: { searchParams:
     .eq("user_id", user.id)
     .maybeSingle();
 
+  const { data: checkoutOrders } = checkout
+    ? await supabase.from("orders").select("id").eq("checkout_id", checkout.id).limit(2)
+    : { data: null };
+  const singleOrderId = checkoutOrders?.length === 1 ? checkoutOrders[0].id : null;
+
   let title = "Payment verified";
   let body = "Your payment is confirmed and your sellers have been notified.";
   let ok = true;
@@ -69,8 +74,8 @@ export default async function CheckoutCallback({ searchParams }: { searchParams:
       <p className={`mt-3 text-sm ${ok ? "text-muted-foreground" : "text-danger"}`}>{body}</p>
       <p className="mt-2 text-xs text-muted-foreground">Reference: {reference}</p>
       <div className="mt-8 flex justify-center gap-3">
-        {checkout ? (
-          <Button asChild><Link href={`/orders/${checkout.id}`}>View order</Link></Button>
+        {singleOrderId ? (
+          <Button asChild><Link href={`/orders/${singleOrderId}`}>View order</Link></Button>
         ) : (
           <Button asChild><Link href="/orders">View orders</Link></Button>
         )}

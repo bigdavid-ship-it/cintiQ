@@ -1,19 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+const EXCLUDED_RESUME_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth/", "/checkout/callback"];
 
 /**
- * Branded top progress bar + subtle transition pill when navigating between routes.
+ * Branded top progress bar + subtle transition pill when navigating between routes,
+ * plus seamless route resume when reopening the installed PWA.
  */
 export function NavigationProgress() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [navigating, setNavigating] = useState(false);
 
   useEffect(() => {
     setNavigating(false);
-  }, [pathname, searchParams]);
+
+    try {
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+      if (isStandalone && !sessionStorage.getItem("cintiq_session_started")) {
+        sessionStorage.setItem("cintiq_session_started", "1");
+        if (pathname === "/") {
+          const saved = localStorage.getItem("cintiq_last_path");
+          if (saved && saved !== "/" && !EXCLUDED_RESUME_PREFIXES.some((p) => saved.startsWith(p))) {
+            router.replace(saved);
+            return;
+          }
+        }
+      } else {
+        sessionStorage.setItem("cintiq_session_started", "1");
+      }
+
+      if (!EXCLUDED_RESUME_PREFIXES.some((p) => pathname.startsWith(p))) {
+        const qs = searchParams.toString();
+        localStorage.setItem("cintiq_last_path", `${pathname}${qs ? `?${qs}` : ""}`);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [pathname, searchParams, router]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

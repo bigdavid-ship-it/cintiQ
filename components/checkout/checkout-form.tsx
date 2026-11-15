@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -33,6 +33,35 @@ export function CheckoutForm({
   const [name, setName] = useState(addresses[0]?.recipient_name ?? defaults.name);
   const [phone, setPhone] = useState(addresses[0]?.phone ?? defaults.phone);
   const [address, setAddress] = useState(addresses[0]?.address ?? "");
+  const [notes, setNotes] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("cintiq_checkout_draft");
+      if (raw) {
+        const d = JSON.parse(raw) as Partial<{ method: "delivery" | "collection"; name: string; phone: string; address: string; notes: string }>;
+        if (d.method === "delivery" || d.method === "collection") setMethod(d.method);
+        if (d.name) setName(d.name);
+        if (d.phone) setPhone(d.phone);
+        if (d.address) setAddress(d.address);
+        if (d.notes) setNotes(d.notes);
+      }
+    } catch {
+      // Ignore storage errors
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      sessionStorage.setItem("cintiq_checkout_draft", JSON.stringify({ method, name, phone, address, notes }));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [hydrated, method, name, phone, address, notes]);
 
   const e = (k: string) => state.fieldErrors?.[k]?.[0];
   const deliveryFeeTotal = method === "delivery" ? deliveryFeeEachKobo * sellerCount : 0;
@@ -47,7 +76,18 @@ export function CheckoutForm({
   };
 
   return (
-    <form action={action} className="space-y-6" noValidate>
+    <form
+      action={action}
+      onSubmit={() => {
+        try {
+          sessionStorage.removeItem("cintiq_checkout_draft");
+        } catch {
+          // Ignore storage errors
+        }
+      }}
+      className="space-y-6"
+      noValidate
+    >
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       {!paystackConfigured && (
         <p role="alert" className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -110,7 +150,12 @@ export function CheckoutForm({
         required
         error={e("deliveryAddress")}
       />
-      <Textarea label="Order notes (optional)" name="notes" />
+      <Textarea
+        label="Order notes (optional)"
+        name="notes"
+        value={notes}
+        onChange={(ev) => setNotes(ev.target.value)}
+      />
 
       {method === "delivery" && (
         <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
