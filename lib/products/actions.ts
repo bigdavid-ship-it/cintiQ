@@ -10,6 +10,39 @@ import { filesFrom, validateUpload } from "@/lib/uploads";
 import { audit } from "@/lib/audit";
 import type { ActionState } from "@/lib/auth/actions";
 
+const VALID_MEDIA_EXT = /\.(jpg|png|webp|mp4|webm|mov)$/i;
+
+function parseUploadedMedia(fd: FormData, sellerId: string): string[] {
+  const raw = fd.get("uploadedMedia");
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is string =>
+        typeof p === "string" &&
+        p.startsWith(`${sellerId}/`) &&
+        !p.includes("..") &&
+        VALID_MEDIA_EXT.test(p),
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function savePreuploadedMedia(productId: string, paths: string[], startOrder: number): Promise<string | null> {
+  if (paths.length === 0) return null;
+  const supabase = await createClient();
+  const ins = await supabase
+    .from("product_images")
+    .insert(paths.map((path, i) => ({ product_id: productId, storage_path: path, sort_order: startOrder + i })));
+  if (ins.error) {
+    await supabase.storage.from("product-images").remove(paths);
+    return ins.error.message.includes("at most 6") ? "A product can have at most 6 photos or videos." : "Media could not be saved";
+  }
+  return null;
+}
+
 async function uploadImages(sellerId: string, productId: string, files: File[], startOrder: number) {
   const supabase = await createClient();
   for (const [i, file] of files.entries()) {
@@ -32,9 +65,11 @@ export async function createProductAction(_: ActionState, fd: FormData): Promise
   const parsed = productSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   const d = parsed.data;
+  const preuploaded = parseUploadedMedia(fd, seller.id);
   const files = filesFrom(fd, "images");
-  if (files.length > 6) return { ok: false, fieldErrors: { images: ["At most 6 photos or videos"] } };
-  if (d.status === "active" && files.length === 0)
+  const totalNew = preuploaded.length + files.length;
+  if (totalNew > 6) return { ok: false, fieldErrors: { images: ["At most 6 photos or videos"] } };
+  if (d.status === "active" && totalNew === 0)
     return { ok: false, fieldErrors: { images: ["Add at least one photo or video to publish this product"] } };
 
   const supabase = await createClient();
@@ -49,7 +84,13 @@ export async function createProductAction(_: ActionState, fd: FormData): Promise
     .single();
   if (error || !product) return { ok: false, message: "Could not create the product." };
 
-  const imgErr = await uploadImages(seller.id, product.id, files, 0);
+  const preErr = await savePreuploadedMedia(product.id, preuploaded, 0);
+  if (preErr) {
+    revalidatePath("/seller/products");
+    redirect(`/seller/products/${product.id}?error=${encodeURIComponent(preErr)}`);
+  }
+
+  const imgErr = await uploadImages(seller.id, product.id, files, preuploaded.length);
   if (imgErr) {
     revalidatePath("/seller/products");
     redirect(`/seller/products/${product.id}?error=${encodeURIComponent(imgErr)}`);
@@ -71,22 +112,31 @@ export async function updateProductAction(productId: string, _: ActionState, fd:
   const d = parsed.data;
 
   const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("products").select("id,status,product_images(id)").eq("id", productId).eq("seller_id", seller.id).maybeSingle();
+  const [{ data: existing }, { data: cat }] = await Promise.all([
+    supabase.from("products").select("id,status,product_images(id)").eq("id", productId).eq("seller_id", seller.id).maybeSingle(),
+    supabase.from("categories").select("id").eq("id", d.categoryId).eq("is_active", true).maybeSingle(),
+  ]);
   if (!existing) return { ok: false, message: "Product not found." };
   if (existing.status === "suspended") return { ok: false, message: "This product was suspended by an administrator." };
-
-  const files = filesFrom(fd, "images");
-  const existingCount = existing.product_images?.length ?? 0;
-  if (existingCount + files.length > 6) return { ok: false, fieldErrors: { images: [`At most 6 photos or videos (you have ${existingCount})`] } };
-  if (d.status === "active" && existingCount + files.length === 0)
-    return { ok: false, fieldErrors: { images: ["Add at least one photo or video to publish this product"] } };
-
-  const { data: cat } = await supabase.from("categories").select("id").eq("id", d.categoryId).eq("is_active", true).maybeSingle();
   if (!cat) return { ok: false, fieldErrors: { categoryId: ["Select a valid category"] } };
 
-  const imgErr = await uploadImages(seller.id, productId, files, existingCount);
-  if (imgErr) return { ok: false, fieldErrors: { images: [imgErr] } };
+  const preuploaded = parseUploadedMedia(fd, seller.id);
+  const files = filesFrom(fd, "images");
+  const existingCount = existing.product_images?.length ?? 0;
+  const totalNew = preuploaded.length + files.length;
+  if (existingCount + totalNew > 6) return { ok: false, fieldErrors: { images: [`At most 6 photos or videos (you have ${existingCount})`] } };
+  if (d.status === "active" && existingCount + totalNew === 0)
+    return { ok: false, fieldErrors: { images: ["Add at least one photo or video to publish this product"] } };
+
+  if (preuploaded.length > 0) {
+    const preErr = await savePreuploadedMedia(productId, preuploaded, existingCount);
+    if (preErr) return { ok: false, fieldErrors: { images: [preErr] } };
+  }
+
+  if (files.length > 0) {
+    const imgErr = await uploadImages(seller.id, productId, files, existingCount + preuploaded.length);
+    if (imgErr) return { ok: false, fieldErrors: { images: [imgErr] } };
+  }
 
   const { error } = await supabase.from("products")
     .update({ category_id: d.categoryId, name: d.name, description: d.description, price_kobo: d.price, quantity: d.quantity, status: d.status })
@@ -95,6 +145,7 @@ export async function updateProductAction(productId: string, _: ActionState, fd:
 
   await audit(seller.id, "product.update", "product", productId, { status: d.status });
   revalidatePath("/seller/products");
+  revalidatePath(`/seller/products/${productId}`);
   revalidatePath(`/products/${productId}`);
   revalidatePath("/shop");
   return { ok: true, message: "Product saved." };
