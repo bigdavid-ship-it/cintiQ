@@ -27,17 +27,33 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
   const rl = rateLimit(`register:${await clientIp()}`, 5, 15 * 60_000);
   if (!rl.ok) return { ok: false, message: `Too many attempts. Try again in ${rl.retryAfterSec}s.` };
 
-  const origin = (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const h = await headers();
+  const forwardedHost = h.get("x-forwarded-host");
+  const rawOrigin =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    h.get("origin") ||
+    (forwardedHost ? `https://${forwardedHost}` : "");
+  const origin = rawOrigin.replace(/\/+$/, "");
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.fullName },
-      emailRedirectTo: `${origin}/auth/callback`,
+      ...(origin ? { emailRedirectTo: `${origin}/auth/callback` } : {}),
     },
   });
-  if (error) return { ok: false, message: "We could not create your account. Check your details and try again." };
+  if (error) {
+    console.error("signUp error:", error.code, error.message);
+    if (error.code === "over_email_send_rate_limit" || error.status === 429) {
+      return { ok: false, message: "Too many verification emails sent right now. Please wait a few minutes (or connect Custom SMTP in Supabase)." };
+    }
+    if (error.code === "weak_password") {
+      return { ok: false, message: error.message };
+    }
+    return { ok: false, message: error.message || "We could not create your account. Check your details and try again." };
+  }
   // Same response whether or not the email already exists (no account enumeration).
   return { ok: true, message: "Check your email to verify your account before signing in." };
 }
