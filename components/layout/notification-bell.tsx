@@ -14,6 +14,44 @@ export type NotificationItem = {
   created_at: string;
 };
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const buffer = new ArrayBuffer(raw.length);
+  const out = new Uint8Array(buffer);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function syncPushSubscription() {
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!vapidPublicKey || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+      });
+    }
+    const json = sub.toJSON();
+    if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        }),
+      });
+    }
+  } catch {
+    // Ignore push subscription errors on unsupported browsers
+  }
+}
+
 export function NotificationBell({
   userId,
   items: initialItems,
@@ -34,6 +72,9 @@ export function NotificationBell({
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
       setPushPerm(Notification.permission);
+      if (Notification.permission === "granted") {
+        void syncPushSubscription();
+      }
     }
   }, []);
 
@@ -168,6 +209,9 @@ export function NotificationBell({
                 onClick={async () => {
                   const res = await Notification.requestPermission().catch(() => "default" as const);
                   setPushPerm(res);
+                  if (res === "granted") {
+                    await syncPushSubscription();
+                  }
                 }}
                 className="shrink-0 rounded bg-brand px-2 py-1 font-medium text-white"
               >

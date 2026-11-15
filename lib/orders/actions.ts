@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireActiveSeller, requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { filesFrom, validateUpload } from "@/lib/uploads";
+import { sendUserPushAndEmail } from "@/lib/notifications/push";
 import type { ActionState } from "@/lib/auth/actions";
 import type { OrderStatus } from "@/lib/orders/transitions";
 
@@ -44,6 +45,16 @@ export async function sellerAdvanceOrderAction(
 
   if (error) return { ok: false, message: error.message };
 
+  const { data: ord } = await supabase.from("orders").select("customer_id").eq("id", orderId).maybeSingle();
+  if (ord?.customer_id) {
+    await sendUserPushAndEmail({
+      userId: ord.customer_id,
+      title: `Order ${nextStatus.replace(/_/g, " ")}`,
+      body: `Order #${orderId.slice(0, 8)} is now ${nextStatus.replace(/_/g, " ")}.`,
+      link: `/orders/${orderId}`,
+    }).catch(() => {});
+  }
+
   revalidatePath("/seller/orders");
   revalidatePath(`/seller/orders/${orderId}`);
   revalidatePath("/orders");
@@ -57,6 +68,16 @@ export async function customerCancelOrderAction(orderId: string, _: ActionState,
   const supabase = await createClient();
   const { error } = await supabase.rpc("customer_cancel_order", { _order_id: orderId, _reason: reason });
   if (error) return { ok: false, message: error.message };
+
+  const { data: ord } = await supabase.from("orders").select("seller_id").eq("id", orderId).maybeSingle();
+  if (ord?.seller_id) {
+    await sendUserPushAndEmail({
+      userId: ord.seller_id,
+      title: "Order cancelled by buyer",
+      body: `Order #${orderId.slice(0, 8)} was cancelled before acceptance.`,
+      link: `/seller/orders/${orderId}`,
+    }).catch(() => {});
+  }
   revalidatePath("/orders");
   return { ok: true, message: "Order cancelled. Refund is pending." };
 }
@@ -80,6 +101,16 @@ export async function verifyDeliveryOtpAction(orderId: string, _: ActionState, f
   const supabase = await createClient();
   const { error } = await supabase.rpc("verify_delivery_otp", { _order_id: orderId, _otp: otp });
   if (error) return { ok: false, message: error.message };
+
+  const { data: ord } = await supabase.from("orders").select("seller_id").eq("id", orderId).maybeSingle();
+  if (ord?.seller_id) {
+    await sendUserPushAndEmail({
+      userId: ord.seller_id,
+      title: "Delivery confirmed",
+      body: `Buyer confirmed delivery for order #${orderId.slice(0, 8)}. Settlement is now eligible.`,
+      link: `/seller/orders/${orderId}`,
+    }).catch(() => {});
+  }
   revalidatePath("/orders");
   revalidatePath(`/seller/orders/${orderId}`);
   return { ok: true, message: "Delivery confirmed. Order completed." };

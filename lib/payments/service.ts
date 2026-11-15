@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyTransaction } from "@/lib/payments/paystack";
+import { sendUserPushAndEmail } from "@/lib/notifications/push";
 
 export type ReconcileResult =
   | { status: "confirmed" | "already_processed" | "paid_refund_required" }
@@ -28,6 +29,35 @@ export async function reconcilePaystackReference(reference: string): Promise<Rec
     if (error) throw new Error(error.message);
     if (data === "amount_mismatch") return { status: "amount_mismatch", reason: "Payment amount did not match order total." };
     if (data === "unknown_reference") return { status: "unknown_reference" };
+
+    if (data === "confirmed") {
+      const { data: chk } = await admin
+        .from("checkouts")
+        .select("id, user_id, orders(id, seller_id)")
+        .eq("reference", tx.reference)
+        .maybeSingle();
+
+      if (chk) {
+        const orderList = (chk.orders as unknown as { id: string; seller_id: string }[] | null) ?? [];
+        await Promise.allSettled([
+          sendUserPushAndEmail({
+            userId: chk.user_id,
+            title: "Payment confirmed",
+            body: `Your order (${tx.reference}) is confirmed and sellers have been notified.`,
+            link: orderList.length === 1 ? `/orders/${orderList[0].id}` : "/orders",
+          }),
+          ...orderList.map((o) =>
+            sendUserPushAndEmail({
+              userId: o.seller_id,
+              title: "New paid order",
+              body: `You received a new paid order (#${o.id.slice(0, 8)}). Open your seller dashboard to accept and fulfil.`,
+              link: `/seller/orders/${o.id}`,
+            }),
+          ),
+        ]);
+      }
+    }
+
     return { status: data as "confirmed" | "already_processed" | "paid_refund_required" };
   }
 
