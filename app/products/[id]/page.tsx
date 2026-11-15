@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Bookmark, CheckCircle2, Clock, ShieldCheck, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProductCard } from "@/components/shop/product-card";
+import { ProductGallery } from "@/components/shop/product-gallery";
 import { AddToCartForm } from "@/components/shop/add-to-cart-form";
 import { ProductReviewForm } from "@/components/shop/product-review-form";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { getSessionUser } from "@/lib/auth/session";
 import { toggleSavedProductAction } from "@/lib/marketplace/actions";
 import { availability, type ProductRow } from "@/lib/types";
 import { formatKobo } from "@/lib/utils";
-import { productImageUrl } from "@/lib/storage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SELECT = "*, product_images(storage_path,sort_order), seller_profiles(store_name,slug,location,seller_type), categories(name,slug)";
@@ -119,29 +118,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       </nav>
 
       <div className="grid gap-8 md:grid-cols-2">
-        <div className="space-y-3">
-          <div className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted">
-            {images[0] && (
-              <Image
-                src={productImageUrl(images[0].storage_path)}
-                alt={p.name}
-                fill
-                priority
-                sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover"
-              />
-            )}
-          </div>
-          {images.length > 1 && (
-            <ul className="grid grid-cols-5 gap-2">
-              {images.slice(1).map((img) => (
-                <li key={img.storage_path} className="relative aspect-square overflow-hidden rounded-md border border-border bg-muted">
-                  <Image src={productImageUrl(img.storage_path)} alt="" fill sizes="100px" className="object-cover" />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <ProductGallery media={images} productName={p.name} />
 
         <div className="space-y-5">
           <div>

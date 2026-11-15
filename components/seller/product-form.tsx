@@ -37,7 +37,7 @@ export function ProductForm({ action, categories, product, imagesLeft, submitLab
         <option value="archived">Archived</option>
       </Select>
       {imagesLeft > 0 && (
-        <FileField label="Add images" name="images" multiple accept="image/jpeg,image/png,image/webp" hint={`JPEG, PNG or WebP, up to 5MB each. You can add ${imagesLeft} more.`} error={e("images")} />
+        <FileField label="Add photos & videos" name="images" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" hint={`JPEG, PNG, WebP (up to 5MB) or MP4, WebM, MOV video (up to 25MB). You can add ${imagesLeft} more.`} error={e("images")} />
       )}
       <Button type="submit" disabled={pending}>
         {pending && <Loader2 className="size-4 animate-spin" aria-hidden />} {submitLabel}

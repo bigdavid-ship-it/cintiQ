@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/form-parts";
 import { deleteImageAction, deleteProductAction, updateProductAction } from "@/lib/products/actions";
 import { koboToNairaString } from "@/lib/money";
-import { productImageUrl } from "@/lib/storage";
+import { isVideoPath, productImageUrl } from "@/lib/storage";
 import type { ProductRow } from "@/lib/types";
 
 export const metadata = { title: "Edit product" };
@@ -39,7 +39,11 @@ export default async function EditProduct({ params, searchParams }: { params: Pr
           {images.map((img) => (
             <li key={img.id} className="space-y-1">
               <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
-                <Image src={productImageUrl(img.storage_path)} alt="" fill sizes="150px" className="object-cover" />
+                {isVideoPath(img.storage_path) ? (
+                  <video src={productImageUrl(img.storage_path)} controls muted playsInline preload="metadata" className="h-full w-full bg-black object-cover" />
+                ) : (
+                  <Image src={productImageUrl(img.storage_path)} alt="" fill sizes="150px" className="object-cover" />
+                )}
               </div>
               {!suspended && (
                 <form action={deleteImageAction.bind(null, p.id, img.id)}><Button type="submit" variant="ghost" className="h-8 w-full text-xs">Remove</Button></form>

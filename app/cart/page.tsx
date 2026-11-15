@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { formatKobo } from "@/lib/utils";
-import { productImageUrl } from "@/lib/storage";
+import { isVideoPath, productImageUrl } from "@/lib/storage";
 import { removeCartItemAction, updateCartItemAction } from "@/lib/cart/actions";
 
 export const metadata = { title: "Shopping cart" };
@@ -103,7 +103,7 @@ export default async function CartPage() {
             <ul className="divide-y divide-border">
               {group.items.map((item) => {
                 const p = item.products!;
-                const img = [...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order)[0]?.storage_path;
+                const img = [...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order).find((m) => !isVideoPath(m.storage_path))?.storage_path;
                 const stockProblem =
                   p.status !== "active"
                     ? "No longer available"

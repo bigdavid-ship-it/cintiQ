@@ -13,7 +13,7 @@ import type { ActionState } from "@/lib/auth/actions";
 async function uploadImages(sellerId: string, productId: string, files: File[], startOrder: number) {
   const supabase = await createClient();
   for (const [i, file] of files.entries()) {
-    const v = await validateUpload(file, "image");
+    const v = await validateUpload(file, "media");
     if (!v.ok) return `${file.name}: ${v.error}`;
     const path = `${sellerId}/${productId}/${randomUUID()}.${v.ext}`;
     const up = await supabase.storage.from("product-images").upload(path, v.bytes, { contentType: v.mime });
@@ -21,7 +21,7 @@ async function uploadImages(sellerId: string, productId: string, files: File[], 
     const ins = await supabase.from("product_images").insert({ product_id: productId, storage_path: path, sort_order: startOrder + i });
     if (ins.error) {
       await supabase.storage.from("product-images").remove([path]);
-      return ins.error.message.includes("at most 6") ? "A product can have at most 6 images." : `${file.name}: could not be saved`;
+      return ins.error.message.includes("at most 6") ? "A product can have at most 6 photos or videos." : `${file.name}: could not be saved`;
     }
   }
   return null;
@@ -33,9 +33,9 @@ export async function createProductAction(_: ActionState, fd: FormData): Promise
   if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   const d = parsed.data;
   const files = filesFrom(fd, "images");
-  if (files.length > 6) return { ok: false, fieldErrors: { images: ["At most 6 images"] } };
+  if (files.length > 6) return { ok: false, fieldErrors: { images: ["At most 6 photos or videos"] } };
   if (d.status === "active" && files.length === 0)
-    return { ok: false, fieldErrors: { images: ["Add at least one image to publish this product"] } };
+    return { ok: false, fieldErrors: { images: ["Add at least one photo or video to publish this product"] } };
 
   const supabase = await createClient();
   const { data: cat } = await supabase.from("categories").select("id").eq("id", d.categoryId).eq("is_active", true).maybeSingle();
@@ -78,9 +78,9 @@ export async function updateProductAction(productId: string, _: ActionState, fd:
 
   const files = filesFrom(fd, "images");
   const existingCount = existing.product_images?.length ?? 0;
-  if (existingCount + files.length > 6) return { ok: false, fieldErrors: { images: [`At most 6 images (you have ${existingCount})`] } };
+  if (existingCount + files.length > 6) return { ok: false, fieldErrors: { images: [`At most 6 photos or videos (you have ${existingCount})`] } };
   if (d.status === "active" && existingCount + files.length === 0)
-    return { ok: false, fieldErrors: { images: ["Add at least one image to publish this product"] } };
+    return { ok: false, fieldErrors: { images: ["Add at least one photo or video to publish this product"] } };
 
   const { data: cat } = await supabase.from("categories").select("id").eq("id", d.categoryId).eq("is_active", true).maybeSingle();
   if (!cat) return { ok: false, fieldErrors: { categoryId: ["Select a valid category"] } };

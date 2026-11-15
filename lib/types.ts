@@ -1,3 +1,5 @@
+import { isVideoPath } from "@/lib/storage";
+
 export type Category = { id: string; name: string; slug: string; description: string | null; sort_order: number; is_active: boolean };
 
 export type ProductRow = {
@@ -24,6 +26,11 @@ export function availability(p: Pick<ProductRow, "status" | "quantity">): "in_st
 }
 
 export function firstImage(p: Pick<ProductRow, "product_images">): string | null {
+  const imgs = [...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+  return imgs.find((m) => !isVideoPath(m.storage_path))?.storage_path ?? null;
+}
+
+export function firstMedia(p: Pick<ProductRow, "product_images">): string | null {
   const imgs = [...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   return imgs[0]?.storage_path ?? null;
 }
