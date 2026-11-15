@@ -1,69 +1,188 @@
-import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, MapPin, Search, ShieldCheck, Store, Truck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth/session";
+import { ProductCard } from "@/components/shop/product-card";
+import { CategoryMarquee } from "@/components/shop/category-marquee";
+import { shuffleArray } from "@/lib/shuffle";
+import type { Category, ProductRow } from "@/lib/types";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const configured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const user = configured ? await getSessionUser() : null;
+
+  let categories: Pick<Category, "id" | "name" | "slug">[] = [];
+  let featured: ProductRow[] = [];
+  let recent: ProductRow[] = [];
+
+  if (configured) {
+    const supabase = await createClient();
+    const productSelect = "*, product_images(storage_path,sort_order), seller_profiles(store_name,slug), categories(name,slug)";
+
+    const [{ data: catData }, { data: featData }, { data: recData }] = await Promise.all([
+      supabase.from("categories").select("id,name,slug").eq("is_active", true).order("sort_order"),
+      supabase.from("products").select(productSelect).eq("status", "active").eq("is_featured", true).limit(24),
+      supabase.from("products").select(productSelect).eq("status", "active").limit(24),
+    ]);
+
+    categories = (catData ?? []) as Pick<Category, "id" | "name" | "slug">[];
+    featured = shuffleArray((featData ?? []) as ProductRow[]).slice(0, 8);
+    recent = shuffleArray((recData ?? []) as ProductRow[]).slice(0, 8);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main>
+      {/* Marketplace Search Hero */}
+      <section className="border-b border-border bg-card">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
+          {!configured && (
+            <p role="alert" className="mb-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Service not configured: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
+            </p>
+          )}
+          <div className="max-w-2xl space-y-2">
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand">
+              <MapPin className="size-3.5" aria-hidden />
+              Campus Commerce Network
+            </p>
+            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+              Your Campus. Your Marketplace.
+            </h1>
+            <p className="text-sm text-muted-foreground sm:text-base">
+              Shop food, fashion, electronics, hostel essentials, and services from verified student entrepreneurs and businesses around campus.
+            </p>
+          </div>
+
+          {/* Prominent Search Bar */}
+          <form action="/explore" className="mt-6 flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <label htmlFor="home-search" className="sr-only">Search products</label>
+              <input
+                id="home-search"
+                name="q"
+                type="search"
+                placeholder="Search laptops, meals, textbooks, skincare, services..."
+                className="h-12 w-full rounded-lg border border-border bg-background pl-10 pr-4 text-sm focus:bg-card"
+              />
+            </div>
+            <Button type="submit" className="h-12 px-6">Search marketplace</Button>
+          </form>
+
+          {/* Category Chips (auto-sliding marquee, pauses on hover/touch/focus) */}
+          <CategoryMarquee categories={categories} />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </section>
+
+      <div className="mx-auto max-w-6xl space-y-12 px-4 py-8 sm:py-10">
+        {/* Verified Sellers Directory CTA */}
+        <section
+          aria-labelledby="sellers-heading"
+          className="flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+              <Store className="size-5" aria-hidden />
+            </div>
+            <div>
+              <h2 id="sellers-heading" className="font-display text-lg font-semibold">
+                Explore verified campus sellers
+              </h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Browse all approved student entrepreneurs and campus businesses in one place.
+              </p>
+            </div>
+          </div>
+          <Button asChild className="shrink-0">
+            <Link href="/sellers">
+              Check out verified sellers <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+        </section>
+
+        {/* Trending / Featured Products */}
+        {featured.length > 0 && (
+          <section aria-labelledby="trending-heading">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 id="trending-heading" className="font-display text-xl font-semibold">Trending on campus</h2>
+              <Link href="/explore" className="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline">
+                View all <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              {featured.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+          </section>
+        )}
+
+        {/* Recently Added Products */}
+        <section aria-labelledby="recent-heading">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 id="recent-heading" className="font-display text-xl font-semibold">Recently added</h2>
+            <Link href="/explore?sort=newest" className="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline">
+              Explore all <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+          {recent.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-card p-10 text-center">
+              <p className="font-medium">No products listed yet.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Verified campus sellers will appear here as soon as they publish inventory.
+              </p>
+              <Button asChild variant="outline" className="mt-4">
+                <Link href="/become-a-seller">Apply to sell first</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              {recent.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+          )}
+        </section>
+
+        {/* Trust & Buyer Protection Pillars */}
+        <section className="grid gap-4 rounded-xl border border-border bg-card p-6 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <ShieldCheck className="size-5 text-brand" aria-hidden />
+            <h3 className="font-display text-sm font-semibold">OTP delivery protection</h3>
+            <p className="text-xs text-muted-foreground">
+              Confirm receipt with a one-time 6-digit code at handover, or report an issue before order completion.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <CheckCircle2 className="size-5 text-brand" aria-hidden />
+            <h3 className="font-display text-sm font-semibold">Verified campus sellers</h3>
+            <p className="text-xs text-muted-foreground">
+              Every student entrepreneur and local business is reviewed with ID and location checks before listing.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Truck className="size-5 text-brand" aria-hidden />
+            <h3 className="font-display text-sm font-semibold">Direct campus fulfilment</h3>
+            <p className="text-xs text-muted-foreground">
+              Choose doorstep hostel/faculty delivery or convenient in-person collection around your university.
+            </p>
+          </div>
+        </section>
+
+        {/* Become a Seller Banner */}
+        {!user?.roles.includes("seller") && (
+          <section className="flex flex-col justify-between gap-6 rounded-xl bg-brand p-8 text-white sm:flex-row sm:items-center">
+            <div className="max-w-xl space-y-2">
+              <h2 className="font-display text-2xl font-semibold">Sell to students on your campus</h2>
+              <p className="text-sm text-white/85">
+                Open a verified storefront, manage inventory, accept Paystack payments, and track commissions transparently.
+              </p>
+            </div>
+            <Button asChild variant="outline" className="shrink-0 border-white bg-white text-brand hover:bg-white/90">
+              <Link href="/become-a-seller">Start selling</Link>
+            </Button>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }
