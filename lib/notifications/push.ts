@@ -1,5 +1,5 @@
 import "server-only";
-import webpush from "web-push";
+import * as webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderCintiqEmailHtml, sendTransactionalEmail } from "@/lib/notifications/email";
 
