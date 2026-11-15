@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isConfigured } from "@/lib/env";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { initializeTransaction } from "@/lib/payments/paystack";
+import { reconcilePaystackReference } from "@/lib/payments/service";
 import type { ActionState } from "@/lib/auth/actions";
 
 export async function startCheckoutAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -54,8 +55,17 @@ export async function startCheckoutAction(_: ActionState, fd: FormData): Promise
   const checkout = created as { checkout_id: string; reference: string; total_kobo: number; reused: boolean };
   const admin = createAdminClient();
 
-  // If this idempotency key already initialized Paystack, reuse its authorization URL
+  // If this idempotency key already initialized Paystack, check if it was already paid before reusing URL
   if (checkout.reused) {
+    try {
+      const check = await reconcilePaystackReference(checkout.reference);
+      if (check.status === "confirmed" || check.status === "already_processed") {
+        redirect(`/checkout/callback?reference=${encodeURIComponent(checkout.reference)}`);
+      }
+    } catch {
+      // Ignore transient verify error and fall back to existing authorization URL
+    }
+
     const { data: existingPay } = await admin
       .from("payments")
       .select("authorization_url")
@@ -67,7 +77,12 @@ export async function startCheckoutAction(_: ActionState, fd: FormData): Promise
   }
 
   const h = await headers();
-  const origin = h.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const forwardedHost = h.get("x-forwarded-host");
+  const rawOrigin =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    h.get("origin") ||
+    (forwardedHost ? `https://${forwardedHost}` : "http://localhost:3000");
+  const origin = rawOrigin.replace(/\/+$/, "");
 
   let authUrl: string;
   try {
