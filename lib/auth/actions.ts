@@ -22,7 +22,13 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
   if (!configured()) return { ok: false, message: "Authentication service is not configured." };
 
   const parsed = registerSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Please fix the highlighted fields below.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   const rl = rateLimit(`register:${await clientIp()}`, 5, 15 * 60_000);
   if (!rl.ok) return { ok: false, message: `Too many attempts. Try again in ${rl.retryAfterSec}s.` };
@@ -53,6 +59,13 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
       return { ok: false, message: error.message };
     }
     return { ok: false, message: error.message || "We could not create your account. Check your details and try again." };
+  }
+
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return {
+      ok: false,
+      message: "An account with this email already exists. Please sign in or reset your password.",
+    };
   }
 
   if (data.session) {
