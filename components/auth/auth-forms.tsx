@@ -42,6 +42,7 @@ export function LoginForm() {
   const params = useSearchParams();
   const urlError = params.get("error");
   const resetDone = params.get("reset") === "1";
+  const registered = params.get("registered") === "1";
   const urlMsg =
     urlError === "suspended"
       ? "This account has been suspended."
@@ -51,6 +52,9 @@ export function LoginForm() {
   return (
     <form action={action} className="space-y-4" noValidate>
       <input type="hidden" name="next" value={params.get("next") ?? ""} />
+      {registered && !state.message && (
+        <Banner state={{ ok: true, message: "Account created! Check your email to verify your account, then sign in." }} />
+      )}
       {resetDone && !state.message && (
         <Banner state={{ ok: true, message: "Password updated. Sign in with your new password." }} />
       )}

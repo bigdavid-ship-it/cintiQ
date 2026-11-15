@@ -36,7 +36,7 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
   const origin = rawOrigin.replace(/\/+$/, "");
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -54,8 +54,11 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
     }
     return { ok: false, message: error.message || "We could not create your account. Check your details and try again." };
   }
-  // Same response whether or not the email already exists (no account enumeration).
-  return { ok: true, message: "Check your email to verify your account before signing in." };
+
+  if (data.session) {
+    redirect("/");
+  }
+  redirect("/login?registered=1");
 }
 
 export async function loginAction(_: ActionState, formData: FormData): Promise<ActionState> {
