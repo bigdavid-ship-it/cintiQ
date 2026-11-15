@@ -38,9 +38,9 @@ export function MobileNav() {
                   active ? "font-semibold text-brand" : "font-medium text-muted-foreground hover:text-foreground",
                 )}
               >
-                {active && <span aria-hidden className="absolute top-0 h-0.5 w-8 rounded-full bg-brand" />}
-                <span className={cn("flex items-center justify-center rounded-full px-3 py-0.5 transition-colors", active && "bg-brand-soft")}>
-                  <Icon className="size-5" aria-hidden />
+                {active && <span aria-hidden className="absolute top-0 h-1 w-10 rounded-b-full bg-brand" />}
+                <span className={cn("flex items-center justify-center rounded-full px-3.5 py-1 transition-colors", active && "bg-brand text-white shadow-xs")}>
+                  <Icon className="size-4.5" aria-hidden />
                 </span>
                 <span>{label}</span>
               </Link>
