@@ -220,7 +220,7 @@ grant execute on function public.customer_cancel_order(uuid, text) to authentica
 
 -- ------------------------------------------------------------ OTP generation & verification
 create or replace function public.request_delivery_otp(_order_id uuid)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare
   _uid uuid := auth.uid();
   _o public.orders;
@@ -258,7 +258,7 @@ revoke all on function public.request_delivery_otp(uuid) from public, anon;
 grant execute on function public.request_delivery_otp(uuid) to authenticated;
 
 create or replace function public.verify_delivery_otp(_order_id uuid, _otp text)
-returns boolean language plpgsql security definer set search_path = public as $$
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare
   _uid uuid := auth.uid();
   _o public.orders;

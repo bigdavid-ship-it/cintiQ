@@ -268,7 +268,7 @@ revoke all on function public.release_checkout(uuid, public.checkout_status) fro
 
 create or replace function public.create_checkout(
   _key text, _method public.fulfilment_method, _name text, _phone text, _address text, _notes text default null)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare
   _uid uuid := auth.uid();
   _existing public.checkouts;
