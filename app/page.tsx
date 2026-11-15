@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, MapPin, Search, ShieldCheck, Store, Truck } from "lucide-react";
+import { ArrowRight, CheckCircle2, MapPin, Search, ShieldCheck, ShoppingBag, Store, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/session";
@@ -52,7 +52,10 @@ export default async function Home() {
               Your Campus. Your Marketplace.
             </h1>
             <p className="text-sm text-muted-foreground sm:text-base">
-              Shop food, fashion, electronics, hostel essentials, and services from verified student entrepreneurs and businesses around campus.
+              Shop food, fashion, electronics, hostel essentials, and services from verified student entrepreneurs and businesses around campus.{" "}
+              <Link href="/how-it-works" className="font-medium text-brand hover:underline">
+                How it works →
+              </Link>
             </p>
           </div>
 
@@ -141,6 +144,64 @@ export default async function Home() {
               {recent.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
           )}
+        </section>
+
+        {/* New to cintiQ: Two-Sector Walkthrough (Buyers vs Sellers) */}
+        <section aria-labelledby="paths-heading" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 id="paths-heading" className="font-display text-xl font-semibold">New to cintiQ? Choose your path</h2>
+              <p className="text-xs text-muted-foreground">A quick walkthrough for shoppers and campus sellers.</p>
+            </div>
+            <Link href="/how-it-works" className="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline">
+              Full walkthrough <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-6">
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand">
+                  <ShoppingBag className="size-3.5" aria-hidden /> For Buyers
+                </span>
+                <h3 className="font-display text-lg font-semibold">Shop from verified campus sellers</h3>
+                <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground sm:text-sm">
+                  <li>Browse products or verified storefronts across campus.</li>
+                  <li>Pay safely with Paystack for hostel delivery or collection.</li>
+                  <li>Inspect your order and share your 6-digit OTP at handover.</li>
+                </ol>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button asChild>
+                  <Link href="/explore">Start shopping</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/how-it-works#buyers-sector">Buyer guide</Link>
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-6">
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand">
+                  <Store className="size-3.5" aria-hidden /> For Sellers
+                </span>
+                <h3 className="font-display text-lg font-semibold">Launch your verified campus store</h3>
+                <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground sm:text-sm">
+                  <li>Apply with your student ID or business details &amp; bank account.</li>
+                  <li>List products and share your unique store link anywhere.</li>
+                  <li>Verify the buyer&apos;s handover OTP and get settled to your bank.</li>
+                </ol>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button asChild>
+                  <Link href="/become-a-seller">Apply to sell</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/how-it-works#sellers-sector">Seller guide</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* Trust & Buyer Protection Pillars */}

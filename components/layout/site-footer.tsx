@@ -83,6 +83,7 @@ export function SiteFooter() {
           <h3 className="font-display mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Company &amp; Support</h3>
           <ul className="space-y-2">
             <li><Link href="/about" className="hover:text-brand">About cintiQ</Link></li>
+            <li><Link href="/how-it-works" className="hover:text-brand">How it works</Link></li>
             <li><Link href="/contact" className="hover:text-brand">Customer support</Link></li>
             <li><Link href="/account/notifications" className="hover:text-brand">Notifications</Link></li>
           </ul>

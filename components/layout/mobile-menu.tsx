@@ -70,6 +70,9 @@ export function MobileMenu({
           <Link href="/sellers" onClick={close} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">
             Verified sellers
           </Link>
+          <Link href="/how-it-works" onClick={close} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">
+            How it works
+          </Link>
           <Link href="/become-a-seller" onClick={close} className="rounded-md px-3 py-2 text-sm font-medium text-brand hover:bg-muted">
             Become a seller
           </Link>
