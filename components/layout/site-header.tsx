@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Menu, Search, ShoppingCart } from "lucide-react";
+import { Search, ShoppingCart } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { NotificationBell, type NotificationItem } from "@/components/layout/notification-bell";
+import { MobileMenu } from "@/components/layout/mobile-menu";
 import { getSessionUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logoutAction } from "@/lib/auth/actions";
@@ -96,34 +97,11 @@ export async function SiteHeader() {
             )}
           </Link>
 
-          <details className="relative">
-            <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md hover:bg-muted" aria-label="Open menu">
-              <Menu className="size-5" />
-            </summary>
-            <nav className="absolute right-0 mt-2 flex w-60 flex-col gap-1 rounded-lg border border-border bg-card p-2 shadow-lg" aria-label="Mobile menu">
-              <Link href="/explore" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Explore marketplace</Link>
-              <Link href="/categories" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Categories</Link>
-              <Link href="/become-a-seller" className="rounded-md px-3 py-2 text-sm font-medium text-brand hover:bg-muted">Become a seller</Link>
-              <Link href="/about" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">About cintiQ</Link>
-              <Link href="/contact" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Support</Link>
-              <div className="my-1 border-t border-border" />
-              {user ? (
-                <>
-                  <Link href="/account/notifications" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">
-                    Notifications {unreadCount > 0 ? `(${unreadCount})` : ""}
-                  </Link>
-                  <Link href="/account/saved" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Saved products</Link>
-                  <Link href={homeForRoles(user.roles)} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Dashboard</Link>
-                  <form action={logoutAction}><Button variant="outline" type="submit" className="mt-1 w-full">Sign out</Button></form>
-                </>
-              ) : (
-                <>
-                  <Link href="/login" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Sign in</Link>
-                  <Button asChild className="mt-1"><Link href="/register">Create account</Link></Button>
-                </>
-              )}
-            </nav>
-          </details>
+          <MobileMenu
+            signedIn={!!user}
+            dashboardHref={user ? homeForRoles(user.roles) : "/login"}
+            unreadCount={unreadCount}
+          />
         </div>
       </div>
     </header>
