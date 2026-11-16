@@ -11,11 +11,21 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   const sp = await searchParams;
   const admin = createAdminClient();
 
-  const { data: users, error } = await admin
-    .from("profiles")
-    .select("id, email, full_name, is_suspended, created_at, user_roles(role)")
-    .order("created_at", { ascending: false })
-    .limit(200);
+  const [{ data: users, error }, { data: roleRows }] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("id, email, full_name, is_suspended, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200),
+    admin.from("user_roles").select("user_id, role"),
+  ]);
+
+  const rolesByUser = new Map<string, string[]>();
+  for (const r of roleRows ?? []) {
+    const list = rolesByUser.get(r.user_id) ?? [];
+    list.push(r.role);
+    rolesByUser.set(r.user_id, list);
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -34,7 +44,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
       ) : (
         <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-card">
         {(users ?? []).map((u) => {
-          const roles = ((u.user_roles ?? []) as unknown as { role: string }[]).map((r) => r.role);
+          const roles = rolesByUser.get(u.id) ?? [];
           const isSelf = u.id === me.id;
           return (
             <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
