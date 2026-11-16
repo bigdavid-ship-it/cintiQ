@@ -73,7 +73,11 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
       return { ok: false, message: error.message || "We could not create your account. Check your details and try again." };
     }
 
-    const actionLink = data?.properties?.action_link;
+    const hashedToken = data?.properties?.hashed_token;
+    const actionLink =
+      origin && hashedToken
+        ? `${origin}/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&type=signup`
+        : data?.properties?.action_link;
     if (!actionLink) {
       return { ok: false, message: "Could not generate your confirmation link. Please try again." };
     }
