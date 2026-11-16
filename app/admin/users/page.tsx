@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/form-parts";
 import { setUserSuspendedAction } from "@/lib/admin/actions";
@@ -9,21 +9,30 @@ export const metadata = { title: "Users" };
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const me = await requireRole(["admin"], "/admin/users");
   const sp = await searchParams;
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { data: users } = await supabase
+  const { data: users, error } = await admin
     .from("profiles")
     .select("id, email, full_name, is_suspended, created_at, user_roles(role)")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(200);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <h1 className="font-display text-2xl font-semibold">Users</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="font-display text-2xl font-semibold">Users</h1>
+        <span className="text-xs text-muted-foreground">{users?.length ?? 0} total</span>
+      </div>
+      {error && <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-danger">Could not load users: {error.message}</p>}
       {sp.error && <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-danger">{sp.error}</p>}
       {sp.done && <p role="status" className="mt-4 rounded-md bg-brand-soft px-3 py-2 text-sm text-success">User updated.</p>}
 
-      <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-card">
+      {!users?.length ? (
+        <p className="mt-6 rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          No users found.
+        </p>
+      ) : (
+        <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-card">
         {(users ?? []).map((u) => {
           const roles = ((u.user_roles ?? []) as unknown as { role: string }[]).map((r) => r.role);
           const isSelf = u.id === me.id;
@@ -48,7 +57,8 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
             </li>
           );
         })}
-      </ul>
+        </ul>
+      )}
     </main>
   );
 }

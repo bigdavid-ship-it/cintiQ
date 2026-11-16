@@ -45,7 +45,10 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
     supabase.from("disputes").select("id", { count: "exact", head: true }).in("status", ["open", "under_investigation"]),
     ordersQ,
     commQ,
-    supabase.from("seller_settlements").select("amount_kobo").in("status", ["pending_provider", "queued", "processing"]),
+    supabase
+      .from("orders")
+      .select("id, total_kobo, commissions(seller_proceeds_kobo), seller_settlements(status)")
+      .eq("status", "completed"),
   ]);
 
   const orderList = orders ?? [];
@@ -60,7 +63,14 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
     const st = (ord as { status?: string } | null)?.status;
     return st === "completed" ? s + c.commission_kobo : s;
   }, 0);
-  const pendingSettlementKobo = (pendingSettlements ?? []).reduce((s, r) => s + r.amount_kobo, 0);
+  const pendingSettlementKobo = (pendingSettlements ?? []).reduce((sum, o) => {
+    const sRaw = Array.isArray(o.seller_settlements) ? o.seller_settlements[0] : o.seller_settlements;
+    const status = (sRaw as { status?: string } | null)?.status;
+    if (status === "settled") return sum;
+    const cRaw = Array.isArray(o.commissions) ? o.commissions[0] : o.commissions;
+    const proceeds = (cRaw as { seller_proceeds_kobo?: number } | null)?.seller_proceeds_kobo;
+    return sum + (proceeds ?? o.total_kobo);
+  }, 0);
 
   const stats = [
     ["Registered customers", String(customers ?? 0), "/admin/users"],

@@ -47,7 +47,8 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
   const ngnBalanceKobo = balances?.find((b) => b.currency === "NGN")?.balance ?? null;
 
   const readyToSettle = (completedOrders ?? []).filter((o) => {
-    const s = (o.seller_settlements as unknown as { status: string }[] | null)?.[0];
+    const raw = o.seller_settlements;
+    const s = (Array.isArray(raw) ? raw[0] : raw) as { status?: string } | null;
     return !s || s.status === "pending_provider" || s.status === "failed";
   });
 
