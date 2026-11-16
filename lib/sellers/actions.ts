@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseApplicationForm, rejectionSchema } from "@/lib/validation/seller";
 import { filesFrom, validateUpload } from "@/lib/uploads";
+import { sendUserPushAndEmail } from "@/lib/notifications/push";
 import type { ActionState } from "@/lib/auth/actions";
 
 const DOC_FIELDS = ["student_id", "government_id", "business_registration", "proof_of_address"] as const;
@@ -87,6 +88,13 @@ export async function submitApplicationAction(_: ActionState, fd: FormData): Pro
     return { ok: false, message: "We could not save your application details. Please try again." };
   }
 
+  await sendUserPushAndEmail({
+    userId: user.id,
+    title: "Application received",
+    body: "We received your seller application and will review it shortly.",
+    link: "/seller",
+  });
+
   revalidatePath("/seller");
   redirect("/seller");
 }
@@ -102,6 +110,28 @@ export async function reviewApplicationAction(applicationId: string, decision: "
   const supabase = await createClient(); // RPC re-checks admin role inside the database
   const { error } = await supabase.rpc("review_seller_application", { _id: applicationId, _decision: decision, _reason: reason });
   if (error) redirect(`/admin/sellers/${applicationId}?error=${encodeURIComponent(error.message)}`);
+
+  const { data: app } = await createAdminClient()
+    .from("seller_applications")
+    .select("user_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (app?.user_id) {
+    const title =
+      decision === "approved"
+        ? "Application approved"
+        : decision === "rejected"
+          ? "Application not approved"
+          : "Application under review";
+    const body =
+      decision === "approved"
+        ? "Your cintiQ seller store is now active! You can start listing products."
+        : decision === "rejected"
+          ? reason || "Your seller application was not approved."
+          : "An administrator is reviewing your seller application.";
+    await sendUserPushAndEmail({ userId: app.user_id, title, body, link: "/seller" });
+  }
+
   revalidatePath("/admin/sellers");
   redirect(`/admin/sellers/${applicationId}?done=${decision}`);
 }
@@ -112,6 +142,12 @@ export async function setSellerStatusAction(applicationId: string, sellerUserId:
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_seller_status", { _user: sellerUserId, _suspend: suspend, _reason: suspend ? reason : null });
   if (error) redirect(`/admin/sellers/${applicationId}?error=${encodeURIComponent(error.message)}`);
+  await sendUserPushAndEmail({
+    userId: sellerUserId,
+    title: suspend ? "Seller account suspended" : "Seller account reactivated",
+    body: suspend ? reason || "Your seller account has been suspended by an administrator." : "Your seller store is active again.",
+    link: "/seller",
+  });
   revalidatePath("/admin/sellers");
   redirect(`/admin/sellers/${applicationId}?done=${suspend ? "suspended" : "reactivated"}`);
 }

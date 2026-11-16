@@ -3,11 +3,21 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from "@/lib/validation/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isConfigured } from "@/lib/env";
+import { renderCintiqEmailHtml, sendTransactionalEmail } from "@/lib/notifications/email";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+  updatePasswordSchema,
+  verifyResetOtpSchema,
+} from "@/lib/validation/auth";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { homeForRoles, safeRedirect, type AppRole } from "@/lib/auth/roles";
 
-export type ActionState = { ok: boolean; message?: string; fieldErrors?: Record<string, string[]> };
+export type ActionState = { ok: boolean; message?: string; fieldErrors?: Record<string, string[]>; otpVerified?: boolean };
 
 async function clientIp() {
   const h = await headers();
@@ -40,6 +50,51 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
     h.get("origin") ||
     (forwardedHost ? `https://${forwardedHost}` : "");
   const origin = rawOrigin.replace(/\/+$/, "");
+
+  if (isConfigured("RESEND_API_KEY", "EMAIL_FROM", "SUPABASE_SERVICE_ROLE_KEY")) {
+    const admin = createAdminClient();
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "signup",
+      email: parsed.data.email,
+      password: parsed.data.password,
+      options: {
+        data: { full_name: parsed.data.fullName },
+        ...(origin ? { redirectTo: `${origin}/auth/callback` } : {}),
+      },
+    });
+    if (error) {
+      const msg = error.message?.toLowerCase() ?? "";
+      if (error.code === "email_exists" || msg.includes("already") || msg.includes("exists")) {
+        return {
+          ok: false,
+          message: "An account with this email already exists. Please sign in or reset your password.",
+        };
+      }
+      return { ok: false, message: error.message || "We could not create your account. Check your details and try again." };
+    }
+
+    const actionLink = data?.properties?.action_link;
+    if (!actionLink) {
+      return { ok: false, message: "Could not generate your confirmation link. Please try again." };
+    }
+
+    const mail = await sendTransactionalEmail({
+      to: parsed.data.email,
+      subject: "Confirm your cintiQ account",
+      html: renderCintiqEmailHtml({
+        title: "Confirm your cintiQ account",
+        body: "Welcome to cintiQ! Tap the button below to verify your email address and activate your account.",
+        recipientName: parsed.data.fullName,
+        recipientEmail: parsed.data.email,
+        ctaLabel: "Confirm my account",
+        ctaUrl: actionLink,
+      }),
+    });
+    if (!mail.ok) {
+      return { ok: false, message: `Account created, but we could not send the confirmation email (${mail.reason}).` };
+    }
+    redirect("/login?registered=1");
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -118,10 +173,77 @@ export async function forgotPasswordAction(_: ActionState, formData: FormData): 
   const rl = rateLimit(`forgot:${await clientIp()}:${parsed.data.email}`, 5, 15 * 60_000);
   if (!rl.ok) return { ok: false, message: `Too many attempts. Try again in ${rl.retryAfterSec}s.` };
 
-  const supabase = await createClient();
-  await supabase.auth.resetPasswordForEmail(parsed.data.email);
+  if (isConfigured("RESEND_API_KEY", "EMAIL_FROM", "SUPABASE_SERVICE_ROLE_KEY")) {
+    const admin = createAdminClient();
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: parsed.data.email,
+    });
+    if (!error && data?.properties?.email_otp) {
+      const { data: prof } = await admin
+        .from("profiles")
+        .select("full_name")
+        .eq("email", parsed.data.email)
+        .maybeSingle();
+      await sendTransactionalEmail({
+        to: parsed.data.email,
+        subject: "Your cintiQ password reset code",
+        html: renderCintiqEmailHtml({
+          title: "Your cintiQ password reset code",
+          body: `Use this 6-digit OTP code to verify your identity and reset your password:\n\n${data.properties.email_otp}\n\nIf you did not request a password reset, you can safely ignore this email.`,
+          recipientName: prof?.full_name,
+          recipientEmail: parsed.data.email,
+        }),
+      }).catch(() => {});
+    }
+  } else {
+    const supabase = await createClient();
+    await supabase.auth.resetPasswordForEmail(parsed.data.email);
+  }
 
   redirect(`/reset-password?email=${encodeURIComponent(parsed.data.email)}&sent=1`);
+}
+
+export async function verifyResetOtpAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  if (!configured()) return { ok: false, message: "Authentication service is not configured." };
+
+  const parsed = verifyResetOtpSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+
+  const rl = rateLimit(`verify-otp:${await clientIp()}:${parsed.data.email}`, 8, 15 * 60_000);
+  if (!rl.ok) return { ok: false, message: `Too many attempts. Try again in ${rl.retryAfterSec}s.` };
+
+  const supabase = await createClient();
+  const { error: otpError } = await supabase.auth.verifyOtp({
+    email: parsed.data.email,
+    token: parsed.data.token,
+    type: "recovery",
+  });
+  if (otpError) {
+    return { ok: false, message: "Invalid or expired OTP code. Request a new one." };
+  }
+
+  return {
+    ok: true,
+    otpVerified: true,
+    message: "OTP verified! Now enter and confirm your new password below.",
+  };
+}
+
+export async function updatePasswordAfterOtpAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  if (!configured()) return { ok: false, message: "Authentication service is not configured." };
+
+  const parsed = updatePasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, otpVerified: true, fieldErrors: parsed.error.flatten().fieldErrors };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) {
+    return { ok: false, otpVerified: true, message: error.message || "Could not update password. Request a new OTP code." };
+  }
+
+  await supabase.auth.signOut();
+  redirect("/login?reset=1");
 }
 
 export async function resetPasswordAction(_: ActionState, formData: FormData): Promise<ActionState> {

@@ -39,6 +39,21 @@ export const forgotPasswordSchema = z.object({
   email: emailSchema,
 });
 
+export const verifyResetOtpSchema = z.object({
+  email: emailSchema,
+  token: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit OTP code from your email"),
+});
+
+export const updatePasswordSchema = z
+  .object({
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match",
+  });
+
 export const resetPasswordSchema = z
   .object({
     email: emailSchema,

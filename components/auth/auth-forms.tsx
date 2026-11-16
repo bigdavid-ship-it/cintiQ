@@ -10,7 +10,8 @@ import {
   forgotPasswordAction,
   loginAction,
   registerAction,
-  resetPasswordAction,
+  updatePasswordAfterOtpAction,
+  verifyResetOtpAction,
   type ActionState,
 } from "@/lib/auth/actions";
 
@@ -101,40 +102,54 @@ export function ForgotPasswordForm() {
 }
 
 export function ResetPasswordForm() {
-  const [state, action, pending] = useActionState(resetPasswordAction, initial);
+  const [otpState, verifyAction, verifying] = useActionState(verifyResetOtpAction, initial);
+  const [passState, updateAction, updating] = useActionState(updatePasswordAfterOtpAction, initial);
   const params = useSearchParams();
   const defaultEmail = params.get("email") ?? "";
   const sent = params.get("sent") === "1";
-  const e = state.fieldErrors ?? {};
+
+  const otpVerified = !!otpState.otpVerified || !!passState.otpVerified;
+  const activeState = otpVerified ? passState : otpState;
+  const e = activeState.fieldErrors ?? {};
+
+  if (!otpVerified) {
+    return (
+      <form action={verifyAction} className="space-y-4" noValidate>
+        {sent && !otpState.message && (
+          <Banner state={{ ok: true, message: "If an account exists for that email, a 6-digit OTP code has been sent." }} />
+        )}
+        <Banner state={otpState} />
+        <Field
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          defaultValue={defaultEmail}
+          required
+          error={e.email?.[0]}
+        />
+        <Field
+          label="6-digit OTP code"
+          name="token"
+          type="text"
+          inputMode="numeric"
+          maxLength={6}
+          placeholder="123456"
+          autoComplete="one-time-code"
+          required
+          error={e.token?.[0]}
+        />
+        <Submit pending={verifying}>Verify OTP code</Submit>
+      </form>
+    );
+  }
+
   return (
-    <form action={action} className="space-y-4" noValidate>
-      {sent && !state.message && (
-        <Banner state={{ ok: true, message: "If an account exists for that email, a 6-digit OTP code has been sent." }} />
-      )}
-      <Banner state={state} />
-      <Field
-        label="Email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        defaultValue={defaultEmail}
-        required
-        error={e.email?.[0]}
-      />
-      <Field
-        label="6-digit OTP code"
-        name="token"
-        type="text"
-        inputMode="numeric"
-        maxLength={6}
-        placeholder="123456"
-        autoComplete="one-time-code"
-        required
-        error={e.token?.[0]}
-      />
+    <form action={updateAction} className="space-y-4" noValidate>
+      <Banner state={passState.message ? passState : otpState} />
       <Field label="New password" name="password" type="password" autoComplete="new-password" required error={e.password?.[0]} />
       <Field label="Confirm new password" name="confirmPassword" type="password" autoComplete="new-password" required error={e.confirmPassword?.[0]} />
-      <Submit pending={pending}>Verify OTP &amp; update password</Submit>
+      <Submit pending={updating}>Update password</Submit>
     </form>
   );
 }
