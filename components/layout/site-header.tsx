@@ -6,7 +6,7 @@ import { NotificationBell, type NotificationItem } from "@/components/layout/not
 import { MobileMenu } from "@/components/layout/mobile-menu";
 import { getSessionUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { logoutAction } from "@/lib/auth/actions";
+import { SignOutButton } from "@/components/auth/sign-out-button";
 import { homeForRoles } from "@/lib/auth/roles";
 
 export async function SiteHeader() {
@@ -71,7 +71,7 @@ export async function SiteHeader() {
                 )}
               </Link>
               <Link href={homeForRoles(user.roles)} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Dashboard</Link>
-              <form action={logoutAction}><Button variant="outline" type="submit" className="h-9 px-3 text-xs">Sign out</Button></form>
+              <SignOutButton className="h-9 px-3 text-xs" />
             </>
           ) : (
             <>

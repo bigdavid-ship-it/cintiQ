@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { logoutAction } from "@/lib/auth/actions";
+import { SignOutButton } from "@/components/auth/sign-out-button";
 
 export function MobileMenu({
   signedIn,
@@ -94,11 +94,7 @@ export function MobileMenu({
               <Link href={dashboardHref} onClick={close} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">
                 Dashboard
               </Link>
-              <form action={logoutAction} onSubmit={close}>
-                <Button variant="outline" type="submit" className="mt-1 w-full">
-                  Sign out
-                </Button>
-              </form>
+              <SignOutButton onSignOut={close} showIcon className="mt-1 w-full" />
             </>
           ) : (
             <>
