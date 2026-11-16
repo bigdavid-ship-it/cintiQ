@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { CheckCircle2, Landmark } from "lucide-react";
 import { requireActiveSeller } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { isConfigured } from "@/lib/env";
+import { listNigerianBanks, type PaystackBank } from "@/lib/payments/paystack";
+import { BankAccountForm } from "@/components/seller/bank-account-form";
 import { StatusBadge } from "@/components/ui/form-parts";
 import { formatKobo } from "@/lib/utils";
 
@@ -10,7 +14,7 @@ export default async function SellerFinancePage() {
   const seller = await requireActiveSeller("/seller/finance");
   const supabase = await createClient();
 
-  const [{ data: orders }, { data: settlements }, { data: reviews }] = await Promise.all([
+  const [{ data: orders }, { data: settlements }, { data: reviews }, { data: bankAccount }, banks] = await Promise.all([
     supabase
       .from("orders")
       .select("id, status, total_kobo, created_at, commissions(percent, gross_kobo, commission_kobo, delivery_fee_kobo, seller_proceeds_kobo)")
@@ -25,6 +29,14 @@ export default async function SellerFinancePage() {
       .order("created_at", { ascending: false })
       .limit(50),
     supabase.from("reviews").select("rating").eq("seller_id", seller.id),
+    supabase
+      .from("seller_bank_accounts")
+      .select("bank_name, bank_code, account_number, account_name, is_verified")
+      .eq("user_id", seller.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    isConfigured("PAYSTACK_SECRET_KEY") ? listNigerianBanks().catch((): PaystackBank[] => []) : Promise.resolve([] as PaystackBank[]),
   ]);
 
   const rows = orders ?? [];
@@ -73,6 +85,38 @@ export default async function SellerFinancePage() {
           </dd>
         </div>
       </dl>
+
+      <section aria-labelledby="payout-bank-heading" className="mt-8 rounded-xl border border-border bg-card p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+              <Landmark className="size-5" aria-hidden />
+            </div>
+            <div>
+              <h2 id="payout-bank-heading" className="font-display text-lg font-semibold">Payout bank account</h2>
+              <p className="text-xs text-muted-foreground">
+                Your settlement payouts are sent here. Changing your account automatically verifies the account name with Paystack.
+              </p>
+            </div>
+          </div>
+          {bankAccount?.is_verified && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand">
+              <CheckCircle2 className="size-3.5" aria-hidden /> Paystack verified
+            </span>
+          )}
+        </div>
+
+        {bankAccount && (
+          <div className="mt-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+            <p className="font-medium">{bankAccount.account_name}</p>
+            <p className="text-xs text-muted-foreground">
+              {bankAccount.bank_name} · <span className="font-mono">{bankAccount.account_number}</span>
+            </p>
+          </div>
+        )}
+
+        <BankAccountForm banks={banks} current={bankAccount} />
+      </section>
 
       <h2 className="font-display mt-10 text-lg font-semibold">Transaction statement</h2>
       {rows.length === 0 ? (

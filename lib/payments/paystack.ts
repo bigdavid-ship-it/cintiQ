@@ -117,6 +117,35 @@ export async function createPaystackRefund(params: {
   });
 }
 
+export type PaystackBank = {
+  name: string;
+  code: string;
+  active: boolean;
+};
+
+export async function listNigerianBanks(): Promise<PaystackBank[]> {
+  const data = await paystackFetch<PaystackBank[]>("/bank?country=nigeria&perPage=100", {
+    method: "GET",
+  });
+  const seen = new Set<string>();
+  return data
+    .filter((b) => b.active && b.code && !seen.has(b.code) && seen.add(b.code))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function resolveBankAccount(params: {
+  accountNumber: string;
+  bankCode: string;
+}): Promise<{ account_number: string; account_name: string; bank_id?: number }> {
+  const qs = new URLSearchParams({
+    account_number: params.accountNumber,
+    bank_code: params.bankCode,
+  });
+  return paystackFetch<{ account_number: string; account_name: string; bank_id?: number }>(`/bank/resolve?${qs.toString()}`, {
+    method: "GET",
+  });
+}
+
 /** Verifies Paystack's HMAC-SHA512 x-paystack-signature header against the raw request body. */
 export function verifyWebhookSignature(rawBody: string, signature: string | null, secretKey: string): boolean {
   if (!signature || !secretKey) return false;
