@@ -21,6 +21,8 @@ export async function sendUserPushAndEmail(params: {
   title: string;
   body: string;
   link?: string;
+  /** Push only (no email), e.g. for high-frequency alerts to admins. */
+  skipEmail?: boolean;
 }): Promise<void> {
   const admin = createAdminClient();
   const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
@@ -59,6 +61,7 @@ export async function sendUserPushAndEmail(params: {
   }
 
   // 2. Branded, personalized Email / Gmail notification
+  if (params.skipEmail) return;
   const { data: profile } = await admin
     .from("profiles")
     .select("email, full_name")
