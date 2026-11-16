@@ -1,7 +1,24 @@
 import "server-only";
+import nodemailer from "nodemailer";
 import { isConfigured, serverEnv } from "@/lib/env";
 
 export type EmailSendResult = { ok: true; id: string } | { ok: false; reason: string };
+
+function hasGmailSmtp(): boolean {
+  return Boolean(process.env.GMAIL_USER?.trim() && process.env.GMAIL_APP_PASSWORD?.trim());
+}
+
+function hasResend(): boolean {
+  return isConfigured("RESEND_API_KEY", "EMAIL_FROM");
+}
+
+function hasCustomResendDomain(): boolean {
+  return hasResend() && !process.env.EMAIL_FROM!.toLowerCase().includes("onboarding@resend.dev");
+}
+
+export function isEmailConfigured(): boolean {
+  return hasGmailSmtp() || hasResend();
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -60,39 +77,77 @@ export function renderCintiqEmailHtml(params: {
 </html>`;
 }
 
+async function sendViaGmailSmtp(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<EmailSendResult> {
+  const user = process.env.GMAIL_USER!.trim();
+  const pass = process.env.GMAIL_APP_PASSWORD!.trim();
+  try {
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: { user, pass },
+    });
+    const info = await transporter.sendMail({
+      from: `cintiQ <${user}>`,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+    });
+    return { ok: true, id: info.messageId || "gmail-smtp" };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : "Gmail SMTP send failed" };
+  }
+}
+
 /**
- * Sends transactional email via Resend.
- * Never simulates delivery when RESEND_API_KEY / EMAIL_FROM are absent.
+ * Sends transactional email via Resend (when configured with a verified domain)
+ * or Gmail SMTP (GMAIL_USER + GMAIL_APP_PASSWORD, no custom domain required).
  */
 export async function sendTransactionalEmail(params: {
   to: string;
   subject: string;
   html: string;
 }): Promise<EmailSendResult> {
-  if (!isConfigured("RESEND_API_KEY", "EMAIL_FROM")) {
-    return { ok: false, reason: "Email provider not configured (RESEND_API_KEY or EMAIL_FROM missing)" };
+  if (!isEmailConfigured()) {
+    return { ok: false, reason: "Email provider not configured (set GMAIL_USER + GMAIL_APP_PASSWORD or RESEND_API_KEY + EMAIL_FROM)" };
   }
 
-  const rawFrom = process.env.EMAIL_FROM!;
-  const from = rawFrom.includes("<") ? rawFrom : `cintiQ <${rawFrom}>`;
+  // Prefer Gmail SMTP when no custom Resend domain is verified yet (onboarding@resend.dev only sends to the owner's email)
+  if (hasGmailSmtp() && !hasCustomResendDomain()) {
+    return sendViaGmailSmtp(params);
+  }
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serverEnv.resendApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [params.to],
-      subject: params.subject,
-      html: params.html,
-    }),
-  });
+  if (hasResend()) {
+    const rawFrom = process.env.EMAIL_FROM!;
+    const from = rawFrom.includes("<") ? rawFrom : `cintiQ <${rawFrom}>`;
 
-  const data = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
-  if (!res.ok || !data?.id) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serverEnv.resendApiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [params.to],
+        subject: params.subject,
+        html: params.html,
+      }),
+    });
+
+    const data = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+    if (res.ok && data?.id) {
+      return { ok: true, id: data.id };
+    }
+    if (hasGmailSmtp()) {
+      return sendViaGmailSmtp(params);
+    }
     return { ok: false, reason: data?.message ?? `Email send failed (${res.status})` };
   }
-  return { ok: true, id: data.id };
+
+  return sendViaGmailSmtp(params);
 }

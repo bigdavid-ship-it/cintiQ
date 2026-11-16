@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isConfigured } from "@/lib/env";
-import { renderCintiqEmailHtml, sendTransactionalEmail } from "@/lib/notifications/email";
+import { isEmailConfigured, renderCintiqEmailHtml, sendTransactionalEmail } from "@/lib/notifications/email";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -51,7 +51,7 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
     (forwardedHost ? `https://${forwardedHost}` : "");
   const origin = rawOrigin.replace(/\/+$/, "");
 
-  if (isConfigured("RESEND_API_KEY", "EMAIL_FROM", "SUPABASE_SERVICE_ROLE_KEY")) {
+  if (isEmailConfigured() && isConfigured("SUPABASE_SERVICE_ROLE_KEY")) {
     const admin = createAdminClient();
     const { data, error } = await admin.auth.admin.generateLink({
       type: "signup",
@@ -80,10 +80,19 @@ export async function registerAction(_: ActionState, formData: FormData): Promis
 
     const mail = await sendTransactionalEmail({
       to: parsed.data.email,
-      subject: "Confirm your cintiQ account",
+      subject: "Welcome to cintiQ — Confirm your account",
       html: renderCintiqEmailHtml({
-        title: "Confirm your cintiQ account",
-        body: "Welcome to cintiQ! Tap the button below to verify your email address and activate your account.",
+        title: "Welcome to cintiQ! Confirm your account",
+        body: [
+          "Thanks for joining cintiQ — your campus marketplace for verified student entrepreneurs and local businesses.",
+          "",
+          "Here's how to get started as a buyer:",
+          "1. Browse products or verified storefronts across campus.",
+          "2. Pay safely with Paystack for hostel delivery or collection.",
+          "3. Inspect your order and share your 6-digit OTP at handover.",
+          "",
+          "Tap the button below to verify your email address and activate your account.",
+        ].join("\n"),
         recipientName: parsed.data.fullName,
         recipientEmail: parsed.data.email,
         ctaLabel: "Confirm my account",
@@ -173,7 +182,7 @@ export async function forgotPasswordAction(_: ActionState, formData: FormData): 
   const rl = rateLimit(`forgot:${await clientIp()}:${parsed.data.email}`, 5, 15 * 60_000);
   if (!rl.ok) return { ok: false, message: `Too many attempts. Try again in ${rl.retryAfterSec}s.` };
 
-  if (isConfigured("RESEND_API_KEY", "EMAIL_FROM", "SUPABASE_SERVICE_ROLE_KEY")) {
+  if (isEmailConfigured() && isConfigured("SUPABASE_SERVICE_ROLE_KEY")) {
     const admin = createAdminClient();
     const { data, error } = await admin.auth.admin.generateLink({
       type: "recovery",

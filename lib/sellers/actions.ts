@@ -119,13 +119,20 @@ export async function reviewApplicationAction(applicationId: string, decision: "
   if (app?.user_id) {
     const title =
       decision === "approved"
-        ? "Application approved"
+        ? "Welcome to cintiQ Sellers — Your store is approved!"
         : decision === "rejected"
           ? "Application not approved"
           : "Application under review";
     const body =
       decision === "approved"
-        ? "Your cintiQ seller store is now active! You can start listing products."
+        ? [
+            "Congratulations! Your cintiQ seller store is now active.",
+            "",
+            "Here's how to start selling:",
+            "1. Add your products with photos or short videos in Seller Dashboard.",
+            "2. Share your unique store link on WhatsApp, Instagram, and campus groups.",
+            "3. Verify the buyer's 6-digit OTP at handover and manage your Paystack-verified bank account under Finance.",
+          ].join("\n")
         : decision === "rejected"
           ? reason || "Your seller application was not approved."
           : "An administrator is reviewing your seller application.";
