@@ -16,12 +16,30 @@ export default async function CheckoutDetailPage({ params }: { params: Promise<{
   const user = await requireRole(["customer", "seller", "admin", "super_admin"], `/orders/${id}`);
   const supabase = await createClient();
 
-  const { data: checkout } = await supabase
+  let { data: checkout } = await supabase
     .from("checkouts")
     .select("*")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (!checkout) {
+    const { data: orderMatch } = await supabase
+      .from("orders")
+      .select("checkout_id")
+      .eq("id", id)
+      .eq("customer_id", user.id)
+      .maybeSingle();
+    if (orderMatch?.checkout_id) {
+      const { data: parentCheckout } = await supabase
+        .from("checkouts")
+        .select("*")
+        .eq("id", orderMatch.checkout_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      checkout = parentCheckout;
+    }
+  }
 
   if (!checkout) notFound();
 
@@ -29,9 +47,9 @@ export default async function CheckoutDetailPage({ params }: { params: Promise<{
     supabase
       .from("orders")
       .select("*, seller_profiles(store_name, slug), order_items(*), disputes(id, status, reason, resolution_note), reviews(id, rating), order_status_history(to_status, note, created_at)")
-      .eq("checkout_id", id)
+      .eq("checkout_id", checkout.id)
       .order("created_at"),
-    supabase.from("payments").select("reference, status, channel, paid_at, authorization_url").eq("checkout_id", id).maybeSingle(),
+    supabase.from("payments").select("reference, status, channel, paid_at, authorization_url").eq("checkout_id", checkout.id).maybeSingle(),
   ]);
 
   return (
