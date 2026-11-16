@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyTransaction } from "@/lib/payments/paystack";
 import { sendUserPushAndEmail } from "@/lib/notifications/push";
+import { callSellerForNewOrder } from "@/lib/notifications/voice";
 
 export type ReconcileResult =
   | { status: "confirmed" | "already_processed" | "paid_refund_required" }
@@ -52,6 +53,12 @@ export async function reconcilePaystackReference(reference: string): Promise<Rec
               title: "New paid order",
               body: `You received a new paid order (#${o.id.slice(0, 8)}). Open your seller dashboard to accept and fulfil.`,
               link: `/seller/orders/${o.id}`,
+            }),
+          ),
+          ...orderList.map((o) =>
+            callSellerForNewOrder({
+              sellerId: o.seller_id,
+              orderId: o.id,
             }),
           ),
         ]);
