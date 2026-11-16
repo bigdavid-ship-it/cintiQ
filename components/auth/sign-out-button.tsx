@@ -12,7 +12,7 @@ export function SignOutButton({
   showIcon = false,
 }: {
   className?: string;
-  variant?: "primary" | "outline" | "ghost" | "danger";
+  variant?: "default" | "outline" | "ghost" | "danger";
   onSignOut?: () => void;
   showIcon?: boolean;
 }) {
