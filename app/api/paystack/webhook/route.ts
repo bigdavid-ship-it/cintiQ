@@ -16,7 +16,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  let payload: { event?: string; data?: { id?: number | string; reference?: string; gateway_response?: string } };
+  let payload: {
+    event?: string;
+    data?: {
+      id?: number | string;
+      reference?: string;
+      transfer_code?: string;
+      gateway_response?: string;
+      reason?: string;
+      failures?: unknown;
+    };
+  };
   try {
     payload = JSON.parse(rawBody);
   } catch {
@@ -62,6 +72,60 @@ export async function POST(request: NextRequest) {
         _reference: reference,
         _reason: payload.data?.gateway_response ?? "Charge failed",
       });
+      await admin
+        .from("payment_webhooks")
+        .update({ status: "processed", processed_at: new Date().toISOString() })
+        .eq("id", logRow.id);
+    } else if (
+      (event === "transfer.success" || event === "transfer.failed" || event === "transfer.reversed") &&
+      payload.data?.transfer_code
+    ) {
+      const transferCode = String(payload.data.transfer_code);
+      const { data: settlement } = await admin
+        .from("seller_settlements")
+        .select("id, order_id, seller_id, status")
+        .eq("provider_reference", transferCode)
+        .maybeSingle();
+
+      if (settlement) {
+        if (event === "transfer.success") {
+          await admin
+            .from("seller_settlements")
+            .update({
+              status: "settled",
+              failure_reason: null,
+              settled_at: new Date().toISOString(),
+            })
+            .eq("id", settlement.id);
+          await admin.rpc("notify", {
+            _user: settlement.seller_id,
+            _type: "settlement.update",
+            _title: "Settlement completed",
+            _body: `Payout for order #${settlement.order_id.slice(0, 8)} (${transferCode}) has been settled to your bank.`,
+            _link: "/seller/finance",
+          });
+        } else {
+          const reason =
+            payload.data.reason ||
+            payload.data.gateway_response ||
+            (event === "transfer.reversed" ? "Transfer was reversed by Paystack" : "Transfer failed on Paystack");
+          await admin
+            .from("seller_settlements")
+            .update({
+              status: "failed",
+              failure_reason: String(reason).slice(0, 300),
+            })
+            .eq("id", settlement.id);
+          await admin.rpc("notify", {
+            _user: settlement.seller_id,
+            _type: "settlement.update",
+            _title: event === "transfer.reversed" ? "Settlement reversed" : "Settlement failed",
+            _body: `Payout for order #${settlement.order_id.slice(0, 8)} (${transferCode}) could not complete. Admin will retry.`,
+            _link: "/seller/finance",
+          });
+        }
+      }
+
       await admin
         .from("payment_webhooks")
         .update({ status: "processed", processed_at: new Date().toISOString() })

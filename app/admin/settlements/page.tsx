@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { isConfigured } from "@/lib/env";
+import { getPaystackBalance } from "@/lib/payments/paystack";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/form-parts";
 import { formatKobo } from "@/lib/utils";
@@ -36,11 +37,18 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
 
   const mode = String(modeRow?.value ?? "unconfigured").replace(/"/g, "");
   const paystackReady = isConfigured("PAYSTACK_SECRET_KEY");
+  const balances = paystackReady ? await getPaystackBalance().catch(() => null) : null;
+  const ngnBalanceKobo = balances?.find((b) => b.currency === "NGN")?.balance ?? null;
 
   const readyToSettle = (completedOrders ?? []).filter((o) => {
     const s = (o.seller_settlements as unknown as { status: string }[] | null)?.[0];
     return !s || s.status === "pending_provider" || s.status === "failed";
   });
+
+  const totalEligibleKobo = readyToSettle.reduce((sum, o) => {
+    const comm = (o.commissions as unknown as { seller_proceeds_kobo: number }[] | null)?.[0];
+    return sum + (comm?.seller_proceeds_kobo ?? o.total_kobo);
+  }, 0);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -49,6 +57,29 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
         Current settlement mode: <strong className="text-foreground">{mode}</strong> · Paystack secret key:{" "}
         <strong className="text-foreground">{paystackReady ? "configured" : "not configured"}</strong>
       </p>
+
+      {paystackReady && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Paystack Available Transfer Balance (NGN)
+            </p>
+            <p className="font-display mt-0.5 text-2xl font-semibold">
+              {ngnBalanceKobo !== null ? formatKobo(ngnBalanceKobo) : "Unable to fetch"}
+            </p>
+          </div>
+          <div className="text-right text-xs">
+            <p className="text-muted-foreground">Total awaiting settlement: <strong className="text-foreground">{formatKobo(totalEligibleKobo)}</strong></p>
+            {ngnBalanceKobo !== null && totalEligibleKobo > 0 && (
+              <p className={`mt-1 font-medium ${ngnBalanceKobo >= totalEligibleKobo ? "text-success" : "text-danger"}`}>
+                {ngnBalanceKobo >= totalEligibleKobo
+                  ? "Balance covers all pending payouts"
+                  : `Short by ${formatKobo(totalEligibleKobo - ngnBalanceKobo)} (top up Paystack or wait for T+1 clearing)`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {mode === "unconfigured" && (
         <p role="alert" className="mt-4 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -70,12 +101,19 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
             {readyToSettle.map((o) => {
               const seller = o.seller_profiles as unknown as { store_name: string } | null;
               const comm = (o.commissions as unknown as { seller_proceeds_kobo: number }[] | null)?.[0];
+              const proceedsKobo = comm?.seller_proceeds_kobo ?? o.total_kobo;
+              const covered = ngnBalanceKobo === null || ngnBalanceKobo >= proceedsKobo;
               return (
                 <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
                   <div>
                     <p className="font-medium">{seller?.store_name} · Order #{o.id.slice(0, 8)}</p>
                     <p className="text-xs text-muted-foreground">
-                      Proceeds: {formatKobo(comm?.seller_proceeds_kobo ?? o.total_kobo)}
+                      Proceeds: {formatKobo(proceedsKobo)}
+                      {ngnBalanceKobo !== null && (
+                        <span className={`ml-2 font-medium ${covered ? "text-success" : "text-danger"}`}>
+                          · {covered ? "Covered by balance" : "Insufficient Paystack balance"}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <form action={initiateSettlementAction.bind(null, o.id)}>

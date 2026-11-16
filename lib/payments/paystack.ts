@@ -146,6 +146,12 @@ export async function resolveBankAccount(params: {
   });
 }
 
+export async function getPaystackBalance(): Promise<{ currency: string; balance: number }[]> {
+  return paystackFetch<{ currency: string; balance: number }[]>("/balance", {
+    method: "GET",
+  });
+}
+
 /** Verifies Paystack's HMAC-SHA512 x-paystack-signature header against the raw request body. */
 export function verifyWebhookSignature(rawBody: string, signature: string | null, secretKey: string): boolean {
   if (!signature || !secretKey) return false;
