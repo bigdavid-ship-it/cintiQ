@@ -15,11 +15,18 @@ function escapeHtml(s: string): string {
 export function renderCintiqEmailHtml(params: {
   title: string;
   body: string;
+  recipientName?: string | null;
+  recipientEmail?: string | null;
   ctaLabel?: string;
   ctaUrl?: string;
 }): string {
   const safeTitle = escapeHtml(params.title);
   const safeBody = escapeHtml(params.body).replace(/\n/g, "<br/>");
+  const firstName = params.recipientName?.trim().split(/\s+/)[0] || "";
+  const greeting = firstName ? `Hi ${escapeHtml(firstName)},` : "Hi there,";
+  const footerRecipient = params.recipientEmail
+    ? `Sent to ${escapeHtml(params.recipientEmail)} · cintiQ Campus Commerce Network`
+    : "Sent by cintiQ Campus Commerce Network";
   const cta =
     params.ctaLabel && params.ctaUrl
       ? `<p style="margin:24px 0 0;"><a href="${escapeHtml(params.ctaUrl)}" style="display:inline-block;background:#0e5c63;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px;">${escapeHtml(params.ctaLabel)}</a></p>`
@@ -37,6 +44,7 @@ export function renderCintiqEmailHtml(params: {
     </tr>
     <tr>
       <td style="padding:24px;">
+        <p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#12161c;">${greeting}</p>
         <h1 style="margin:0 0 12px;font-size:18px;font-weight:600;color:#12161c;">${safeTitle}</h1>
         <p style="margin:0;font-size:14px;line-height:1.6;color:#3d4450;">${safeBody}</p>
         ${cta}
@@ -44,7 +52,7 @@ export function renderCintiqEmailHtml(params: {
     </tr>
     <tr>
       <td style="border-top:1px solid #e2e0d8;padding:14px 24px;font-size:11px;color:#5d6572;">
-        Sent by cintiQ Campus Commerce Network
+        ${footerRecipient}
       </td>
     </tr>
   </table>

@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireActiveSeller, requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { filesFrom, validateUpload } from "@/lib/uploads";
 import { sendUserPushAndEmail } from "@/lib/notifications/push";
 import type { ActionState } from "@/lib/auth/actions";
@@ -157,6 +158,20 @@ export async function openDisputeAction(orderId: string, _: ActionState, fd: For
     }
   }
 
+  const { data: orderRow } = await createAdminClient()
+    .from("orders")
+    .select("seller_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (orderRow?.seller_id) {
+    await sendUserPushAndEmail({
+      userId: orderRow.seller_id,
+      title: "Customer opened a dispute",
+      body: `${parsed.data.reason}: ${parsed.data.description.slice(0, 140)}`,
+      link: `/seller/orders/${orderId}`,
+    });
+  }
+
   revalidatePath("/orders");
   revalidatePath(`/seller/orders/${orderId}`);
   revalidatePath("/admin/disputes");
@@ -210,6 +225,32 @@ export async function resolveDisputeAction(
     _note: note,
   });
   if (error) redirect(`/admin/disputes/${disputeId}?error=${encodeURIComponent(error.message)}`);
+
+  const { data: disp } = await createAdminClient()
+    .from("disputes")
+    .select("order_id, customer_id, seller_id")
+    .eq("id", disputeId)
+    .maybeSingle();
+  if (disp) {
+    const buyerTitle =
+      decision === "under_investigation"
+        ? "Dispute under investigation"
+        : decision === "resolved_refund"
+          ? "Refund approved"
+          : "Dispute closed";
+    const sellerTitle =
+      decision === "under_investigation"
+        ? "Dispute under investigation"
+        : decision === "resolved_refund"
+          ? "Dispute resolved (refund to buyer)"
+          : "Dispute resolved in your favour";
+    const body = note || "An administrator updated your dispute status.";
+    await Promise.all([
+      sendUserPushAndEmail({ userId: disp.customer_id, title: buyerTitle, body, link: `/orders/${disp.order_id}` }),
+      sendUserPushAndEmail({ userId: disp.seller_id, title: sellerTitle, body, link: `/seller/orders/${disp.order_id}` }),
+    ]);
+  }
+
   revalidatePath("/admin/disputes");
   revalidatePath(`/admin/disputes/${disputeId}`);
   redirect(`/admin/disputes/${disputeId}?done=${decision}`);

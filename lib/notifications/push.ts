@@ -58,10 +58,10 @@ export async function sendUserPushAndEmail(params: {
     );
   }
 
-  // 2. Branded Email / Gmail notification
+  // 2. Branded, personalized Email / Gmail notification
   const { data: profile } = await admin
     .from("profiles")
-    .select("email")
+    .select("email, full_name")
     .eq("id", params.userId)
     .maybeSingle();
 
@@ -72,6 +72,8 @@ export async function sendUserPushAndEmail(params: {
       html: renderCintiqEmailHtml({
         title: params.title,
         body: params.body,
+        recipientName: profile.full_name,
+        recipientEmail: profile.email,
         ctaLabel: fullLink ? "Open in cintiQ" : undefined,
         ctaUrl: fullLink,
       }),

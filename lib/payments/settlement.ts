@@ -2,6 +2,7 @@ import "server-only";
 import { isConfigured } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createTransferRecipient, initiateTransfer } from "@/lib/payments/paystack";
+import { sendUserPushAndEmail } from "@/lib/notifications/push";
 
 export type SettlementMode = "unconfigured" | "paystack_split_manual" | "paystack_transfer";
 
@@ -143,13 +144,23 @@ export async function executeSellerSettlement(params: {
       failure_reason: null,
       settled_at: isDone ? new Date().toISOString() : null,
     });
-    await admin.rpc("notify", {
-      _user: order.seller_id,
-      _type: "settlement.update",
-      _title: isDone ? "Settlement sent" : "Settlement processing",
-      _body: `Payout for order #${order.id.slice(0, 8)} (${transfer.transfer_code}).`,
-      _link: "/seller/finance",
-    });
+    const title = isDone ? "Settlement sent" : "Settlement processing";
+    const body = `Payout for order #${order.id.slice(0, 8)} (${transfer.transfer_code}).`;
+    await Promise.all([
+      admin.rpc("notify", {
+        _user: order.seller_id,
+        _type: "settlement.update",
+        _title: title,
+        _body: body,
+        _link: "/seller/finance",
+      }),
+      sendUserPushAndEmail({
+        userId: order.seller_id,
+        title,
+        body,
+        link: "/seller/finance",
+      }),
+    ]);
     await admin.rpc("write_audit", {
       _actor: params.actorId,
       _action: "settlement.initiated",

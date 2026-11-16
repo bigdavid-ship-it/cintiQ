@@ -4,6 +4,7 @@ import { isConfigured, serverEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyWebhookSignature } from "@/lib/payments/paystack";
 import { reconcilePaystackReference } from "@/lib/payments/service";
+import { sendUserPushAndEmail } from "@/lib/notifications/push";
 
 export async function POST(request: NextRequest) {
   if (!isConfigured("PAYSTACK_SECRET_KEY", "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")) {
@@ -89,6 +90,8 @@ export async function POST(request: NextRequest) {
 
       if (settlement) {
         if (event === "transfer.success") {
+          const title = "Settlement completed";
+          const body = `Payout for order #${settlement.order_id.slice(0, 8)} (${transferCode}) has been settled to your bank.`;
           await admin
             .from("seller_settlements")
             .update({
@@ -97,18 +100,28 @@ export async function POST(request: NextRequest) {
               settled_at: new Date().toISOString(),
             })
             .eq("id", settlement.id);
-          await admin.rpc("notify", {
-            _user: settlement.seller_id,
-            _type: "settlement.update",
-            _title: "Settlement completed",
-            _body: `Payout for order #${settlement.order_id.slice(0, 8)} (${transferCode}) has been settled to your bank.`,
-            _link: "/seller/finance",
-          });
+          await Promise.all([
+            admin.rpc("notify", {
+              _user: settlement.seller_id,
+              _type: "settlement.update",
+              _title: title,
+              _body: body,
+              _link: "/seller/finance",
+            }),
+            sendUserPushAndEmail({
+              userId: settlement.seller_id,
+              title,
+              body,
+              link: "/seller/finance",
+            }),
+          ]);
         } else {
           const reason =
             payload.data.reason ||
             payload.data.gateway_response ||
             (event === "transfer.reversed" ? "Transfer was reversed by Paystack" : "Transfer failed on Paystack");
+          const title = event === "transfer.reversed" ? "Settlement reversed" : "Settlement failed";
+          const body = `Payout for order #${settlement.order_id.slice(0, 8)} (${transferCode}) could not complete. Admin will retry.`;
           await admin
             .from("seller_settlements")
             .update({
@@ -116,13 +129,21 @@ export async function POST(request: NextRequest) {
               failure_reason: String(reason).slice(0, 300),
             })
             .eq("id", settlement.id);
-          await admin.rpc("notify", {
-            _user: settlement.seller_id,
-            _type: "settlement.update",
-            _title: event === "transfer.reversed" ? "Settlement reversed" : "Settlement failed",
-            _body: `Payout for order #${settlement.order_id.slice(0, 8)} (${transferCode}) could not complete. Admin will retry.`,
-            _link: "/seller/finance",
-          });
+          await Promise.all([
+            admin.rpc("notify", {
+              _user: settlement.seller_id,
+              _type: "settlement.update",
+              _title: title,
+              _body: body,
+              _link: "/seller/finance",
+            }),
+            sendUserPushAndEmail({
+              userId: settlement.seller_id,
+              title,
+              body,
+              link: "/seller/finance",
+            }),
+          ]);
         }
       }
 

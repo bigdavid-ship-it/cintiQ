@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isConfigured } from "@/lib/env";
 import { createPaystackRefund } from "@/lib/payments/paystack";
 import { executeSellerSettlement } from "@/lib/payments/settlement";
+import { sendUserPushAndEmail } from "@/lib/notifications/push";
 
 export async function initiateSettlementAction(orderId: string) {
   const adminUser = await requireRole(["admin"]);
@@ -61,13 +62,20 @@ export async function markManualSettlementAction(orderId: string, fd: FormData) 
     redirect(`/admin/settlements?error=${encodeURIComponent("Could not record manual settlement.")}`);
   }
 
+  const manualBody = `Manual bank payout for order #${order.id.slice(0, 8)} (Ref: ${transferRef}) has been completed.`;
   await Promise.all([
     admin.rpc("notify", {
       _user: order.seller_id,
       _type: "settlement.update",
       _title: "Settlement sent",
-      _body: `Manual bank payout for order #${order.id.slice(0, 8)} (Ref: ${transferRef}) has been completed.`,
+      _body: manualBody,
       _link: "/seller/finance",
+    }),
+    sendUserPushAndEmail({
+      userId: order.seller_id,
+      title: "Settlement sent",
+      body: manualBody,
+      link: "/seller/finance",
     }),
     admin.rpc("write_audit", {
       _actor: adminUser.id,
@@ -92,7 +100,7 @@ export async function processRefundAction(orderId: string, fd: FormData) {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("id, total_kobo, status, checkouts(reference)")
+    .select("id, customer_id, total_kobo, status, checkouts(reference)")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -119,6 +127,14 @@ export async function processRefundAction(orderId: string, fd: FormData) {
       _reason: note,
     });
     if (error) redirect(`/admin/settlements?error=${encodeURIComponent(error.message)}`);
+    if (order.customer_id) {
+      await sendUserPushAndEmail({
+        userId: order.customer_id,
+        title: "Refund processed",
+        body: `Your refund for order #${orderId.slice(0, 8)} has been issued via Paystack.`,
+        link: `/orders/${orderId}`,
+      });
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Refund failed";
     redirect(`/admin/settlements?error=${encodeURIComponent(msg)}`);
