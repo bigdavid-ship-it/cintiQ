@@ -5,7 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { FormBanner, Select } from "@/components/ui/form-parts";
-import { updateSellerBankAction, verifySellerBankAction, type BankVerifyState } from "@/lib/seller/bank-actions";
+import { updateSellerBankAction, type BankVerifyState } from "@/lib/seller/bank-actions";
 import type { PaystackBank } from "@/lib/payments/paystack";
 
 type Props = {
@@ -24,22 +24,15 @@ const INITIAL: BankVerifyState = { ok: false };
 export function BankAccountForm({ banks, current }: Props) {
   const [selectedCode, setSelectedCode] = useState(current?.bank_code ?? "");
   const [accountNumber, setAccountNumber] = useState(current?.account_number ?? "");
-  const [verifyState, verifyAction, verifying] = useActionState(verifySellerBankAction, INITIAL);
   const [saveState, saveAction, saving] = useActionState(updateSellerBankAction, INITIAL);
 
   const selectedBankName =
     banks.find((b) => b.code === selectedCode)?.name ?? current?.bank_name ?? "";
 
-  const activeState = saveState.message || saveState.fieldErrors ? saveState : verifyState;
+  const activeState = saveState;
   const e = (k: string) => activeState.fieldErrors?.[k]?.[0];
 
-  const verifiedName =
-    (saveState.ok ? saveState.verifiedName : undefined) ??
-    (verifyState.ok &&
-    verifyState.verifiedBankCode === selectedCode &&
-    verifyState.verifiedAccountNumber === accountNumber.trim()
-      ? verifyState.verifiedName
-      : undefined);
+  const verifiedName = saveState.ok ? saveState.verifiedName : undefined;
 
   return (
     <form action={saveAction} className="mt-4 space-y-4">
@@ -86,14 +79,9 @@ export function BankAccountForm({ banks, current }: Props) {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" formAction={verifyAction} variant="outline" disabled={verifying || saving || banks.length === 0}>
-          {verifying && <Loader2 className="size-4 animate-spin" aria-hidden />} Verify name with Paystack
-        </Button>
-        <Button type="submit" disabled={saving || verifying || banks.length === 0}>
-          {saving && <Loader2 className="size-4 animate-spin" aria-hidden />} Verify &amp; Save bank account
-        </Button>
-      </div>
+      <Button type="submit" disabled={saving || banks.length === 0}>
+        {saving && <Loader2 className="size-4 animate-spin" aria-hidden />} Verify &amp; Save bank account
+      </Button>
     </form>
   );
 }
