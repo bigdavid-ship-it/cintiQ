@@ -56,7 +56,8 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
 
   const gmvKobo = orderList.reduce((s, o) => s + o.total_kobo, 0);
   const commissionKobo = (comms ?? []).reduce((s, c) => {
-    const st = (c.orders as unknown as { status: string } | null)?.status;
+    const ord = Array.isArray(c.orders) ? c.orders[0] : c.orders;
+    const st = (ord as { status?: string } | null)?.status;
     return st === "completed" ? s + c.commission_kobo : s;
   }, 0);
   const pendingSettlementKobo = (pendingSettlements ?? []).reduce((s, r) => s + r.amount_kobo, 0);

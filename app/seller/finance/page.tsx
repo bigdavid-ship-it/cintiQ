@@ -1,12 +1,19 @@
 import Link from "next/link";
-import { CheckCircle2, Landmark } from "lucide-react";
+import { CheckCircle2, Landmark, Phone } from "lucide-react";
 import { requireActiveSeller } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { isConfigured } from "@/lib/env";
 import { listNigerianBanks, type PaystackBank } from "@/lib/payments/paystack";
 import { BankAccountForm } from "@/components/seller/bank-account-form";
+import { PhoneNumberForm } from "@/components/seller/phone-form";
 import { StatusBadge } from "@/components/ui/form-parts";
 import { formatKobo } from "@/lib/utils";
+
+type CommissionInfo = { seller_proceeds_kobo: number };
+function pickCommission(raw: unknown): CommissionInfo | null {
+  if (!raw) return null;
+  return (Array.isArray(raw) ? raw[0] : raw) as CommissionInfo | null;
+}
 
 export const metadata = { title: "Finance & performance" };
 
@@ -14,10 +21,10 @@ export default async function SellerFinancePage() {
   const seller = await requireActiveSeller("/seller/finance");
   const supabase = await createClient();
 
-  const [{ data: orders }, { data: settlements }, { data: reviews }, { data: bankAccount }, banks] = await Promise.all([
+  const [{ data: orders }, { data: settlements }, { data: reviews }, { data: bankAccount }, { data: sellerProfile }, banks] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, total_kobo, created_at, commissions(percent, gross_kobo, commission_kobo, delivery_fee_kobo, seller_proceeds_kobo)")
+      .select("id, status, total_kobo, created_at, commissions(seller_proceeds_kobo)")
       .eq("seller_id", seller.id)
       .not("paid_at", "is", null)
       .order("created_at", { ascending: false })
@@ -36,23 +43,18 @@ export default async function SellerFinancePage() {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("seller_profiles").select("phone").eq("user_id", seller.id).maybeSingle(),
     isConfigured("PAYSTACK_SECRET_KEY") ? listNigerianBanks().catch((): PaystackBank[] => []) : Promise.resolve([] as PaystackBank[]),
   ]);
 
   const rows = orders ?? [];
   const completed = rows.filter((o) => o.status === "completed");
   const disputed = rows.filter((o) => o.status === "disputed");
-  let grossTotal = 0;
-  let commTotal = 0;
   let netTotal = 0;
 
   for (const o of completed) {
-    const c = (o.commissions as unknown as { gross_kobo: number; commission_kobo: number; seller_proceeds_kobo: number }[] | null)?.[0];
-    if (c) {
-      grossTotal += c.gross_kobo;
-      commTotal += c.commission_kobo;
-      netTotal += c.seller_proceeds_kobo;
-    }
+    const c = pickCommission(o.commissions);
+    netTotal += c ? c.seller_proceeds_kobo : o.total_kobo;
   }
 
   const avgRating =
@@ -65,17 +67,13 @@ export default async function SellerFinancePage() {
       <Link href="/seller" className="text-sm text-brand hover:underline">← Back to seller dashboard</Link>
       <h1 className="font-display mt-2 text-2xl font-semibold">Finance &amp; performance</h1>
 
-      <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-6 grid gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-border bg-card p-4">
-          <dt className="text-xs text-muted-foreground">Completed sales (gross)</dt>
-          <dd className="font-display mt-1 text-xl font-semibold">{formatKobo(grossTotal)}</dd>
+          <dt className="text-xs text-muted-foreground">Completed orders</dt>
+          <dd className="font-display mt-1 text-xl font-semibold">{completed.length}</dd>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <dt className="text-xs text-muted-foreground">Platform commissions</dt>
-          <dd className="font-display mt-1 text-xl font-semibold">{formatKobo(commTotal)}</dd>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <dt className="text-xs text-muted-foreground">Net seller proceeds</dt>
+          <dt className="text-xs text-muted-foreground">Completed earnings</dt>
           <dd className="font-display mt-1 text-xl font-semibold text-brand">{formatKobo(netTotal)}</dd>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
@@ -85,6 +83,21 @@ export default async function SellerFinancePage() {
           </dd>
         </div>
       </dl>
+
+      <section aria-labelledby="store-phone-heading" className="mt-8 rounded-xl border border-border bg-card p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+            <Phone className="size-5" aria-hidden />
+          </div>
+          <div>
+            <h2 id="store-phone-heading" className="font-display text-lg font-semibold">Store phone number</h2>
+            <p className="text-xs text-muted-foreground">
+              Used for automated new-order voice call alerts and admin contact.
+            </p>
+          </div>
+        </div>
+        <PhoneNumberForm currentPhone={sellerProfile?.phone ?? ""} />
+      </section>
 
       <section aria-labelledby="payout-bank-heading" className="mt-8 rounded-xl border border-border bg-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -130,14 +143,13 @@ export default async function SellerFinancePage() {
               <tr>
                 <th className="p-3">Order</th>
                 <th className="p-3">Status</th>
-                <th className="p-3">Gross</th>
-                <th className="p-3">Commission</th>
-                <th className="p-3">Net proceeds</th>
+                <th className="p-3">Your earnings</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((o) => {
-                const c = (o.commissions as unknown as { percent: number; gross_kobo: number; commission_kobo: number; seller_proceeds_kobo: number }[] | null)?.[0];
+                const c = pickCommission(o.commissions);
+                const earningsKobo = c ? c.seller_proceeds_kobo : o.total_kobo;
                 return (
                   <tr key={o.id}>
                     <td className="p-3">
@@ -147,9 +159,7 @@ export default async function SellerFinancePage() {
                       <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleDateString("en-NG")}</div>
                     </td>
                     <td className="p-3"><StatusBadge status={o.status} /></td>
-                    <td className="p-3">{c ? formatKobo(c.gross_kobo) : formatKobo(o.total_kobo)}</td>
-                    <td className="p-3">{c ? `${formatKobo(c.commission_kobo)} (${c.percent}%)` : "—"}</td>
-                    <td className="p-3 font-medium">{c ? formatKobo(c.seller_proceeds_kobo) : "—"}</td>
+                    <td className="p-3 font-medium">{formatKobo(earningsKobo)}</td>
                   </tr>
                 );
               })}

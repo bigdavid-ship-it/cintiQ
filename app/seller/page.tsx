@@ -16,10 +16,11 @@ export default async function SellerHome() {
   ]);
 
   if (store) {
-    const [{ count: total }, { count: live }, { count: out }] = await Promise.all([
+    const [{ count: total }, { count: live }, { count: out }, { count: completedSales }] = await Promise.all([
       supabase.from("products").select("id", { count: "exact", head: true }).eq("seller_id", user.id),
       supabase.from("products").select("id", { count: "exact", head: true }).eq("seller_id", user.id).eq("status", "active"),
       supabase.from("products").select("id", { count: "exact", head: true }).eq("seller_id", user.id).eq("status", "active").eq("quantity", 0),
+      supabase.from("orders").select("id", { count: "exact", head: true }).eq("seller_id", user.id).eq("status", "completed"),
     ]);
     return (
       <main className="mx-auto max-w-5xl px-4 py-10">
@@ -45,8 +46,8 @@ export default async function SellerHome() {
             Your seller account is suspended{store.suspended_reason ? `: ${store.suspended_reason}` : "."} Your products are hidden from customers. Contact cintiQ support.
           </p>
         )}
-        <dl className="mt-8 grid gap-4 sm:grid-cols-3">
-          {[["Products", total ?? 0], ["Published", live ?? 0], ["Published & out of stock", out ?? 0]].map(([k, v]) => (
+        <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[["Products", total ?? 0], ["Published", live ?? 0], ["Out of stock", out ?? 0], ["Completed sales", completedSales ?? 0]].map(([k, v]) => (
             <div key={String(k)} className="rounded-lg border border-border bg-card p-4">
               <dt className="text-sm text-muted-foreground">{k}</dt>
               <dd className="font-display mt-1 text-2xl font-semibold">{v}</dd>

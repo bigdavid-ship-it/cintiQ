@@ -9,6 +9,12 @@ import { initiateSettlementAction, markManualSettlementAction, processRefundActi
 
 export const metadata = { title: "Settlements & refunds" };
 
+function pickProceeds(raw: unknown): number | null {
+  if (!raw) return null;
+  const item = Array.isArray(raw) ? raw[0] : raw;
+  return (item as { seller_proceeds_kobo?: number } | null)?.seller_proceeds_kobo ?? null;
+}
+
 export default async function AdminSettlementsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   await requireRole(["admin"], "/admin/settlements");
   const sp = await searchParams;
@@ -60,8 +66,7 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
   }
 
   const totalEligibleKobo = readyToSettle.reduce((sum, o) => {
-    const comm = (o.commissions as unknown as { seller_proceeds_kobo: number }[] | null)?.[0];
-    return sum + (comm?.seller_proceeds_kobo ?? o.total_kobo);
+    return sum + (pickProceeds(o.commissions) ?? o.total_kobo);
   }, 0);
 
   return (
@@ -114,8 +119,7 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
           <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-card">
             {readyToSettle.map((o) => {
               const seller = o.seller_profiles as unknown as { store_name: string } | null;
-              const comm = (o.commissions as unknown as { seller_proceeds_kobo: number }[] | null)?.[0];
-              const proceedsKobo = comm?.seller_proceeds_kobo ?? o.total_kobo;
+              const proceedsKobo = pickProceeds(o.commissions) ?? o.total_kobo;
               const covered = ngnBalanceKobo === null || ngnBalanceKobo >= proceedsKobo;
               const bank = bankBySeller.get(o.seller_id);
               return (
