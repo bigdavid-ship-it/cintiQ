@@ -62,32 +62,33 @@ export async function userSendSupportMessageAction(raw: string): Promise<SendRes
   const posted = await postMessage({ ownerId: user.id, senderId: user.id, role: "user", body: parsed.body });
   if (!posted) return { ok: false, error: "We could not send your message. Please try again." };
 
-  // Alert admins only for the first unread message in a burst to avoid notification spam.
+  const admin = createAdminClient();
+  const who = user.fullName || user.email || "A user";
+  const preview = parsed.body.length > 120 ? `${parsed.body.slice(0, 117)}...` : parsed.body;
+  const emailBody = `${who}${user.email ? ` (${user.email})` : ""} sent a support message:\n\n"${parsed.body}"`;
+  const link = `/admin/support/${posted.conversationId}`;
+
   if (posted.adminUnreadBefore === 0) {
-    const admin = createAdminClient();
-    const who = user.fullName || user.email || "A user";
-    const preview = parsed.body.length > 120 ? `${parsed.body.slice(0, 117)}...` : parsed.body;
-    const link = `/admin/support/${posted.conversationId}`;
     await admin.rpc("notify_admins", {
       _type: "support.message",
       _title: `New support message from ${who}`,
       _body: preview,
       _link: link,
     });
-    const { data: admins } = await admin.from("user_roles").select("user_id").in("role", ["admin", "super_admin"]);
-    const adminIds = [...new Set((admins ?? []).map((a) => a.user_id as string))];
-    await Promise.all(
-      adminIds.map((id) =>
-        sendUserPushAndEmail({
-          userId: id,
-          title: `New support message from ${who}`,
-          body: preview,
-          link,
-          skipEmail: true,
-        }).catch(() => {}),
-      ),
-    );
   }
+
+  const { data: admins } = await admin.from("user_roles").select("user_id").in("role", ["admin", "super_admin"]);
+  const adminIds = [...new Set((admins ?? []).map((a) => a.user_id as string))];
+  await Promise.all(
+    adminIds.map((id) =>
+      sendUserPushAndEmail({
+        userId: id,
+        title: `New support message from ${who}`,
+        body: emailBody,
+        link,
+      }).catch(() => {}),
+    ),
+  );
 
   revalidatePath("/admin/support");
   return { ok: true, message: posted.message };
@@ -105,9 +106,8 @@ export async function adminReplySupportMessageAction(ownerId: string, raw: strin
   const posted = await postMessage({ ownerId, senderId: adminUser.id, role: "admin", body: parsed.body });
   if (!posted) return { ok: false, error: "Could not send the reply. Please try again." };
 
-  // Notify the customer on their first unread reply (in-app + phone push + email).
+  const preview = parsed.body.length > 120 ? `${parsed.body.slice(0, 117)}...` : parsed.body;
   if (posted.userUnreadBefore === 0) {
-    const preview = parsed.body.length > 120 ? `${parsed.body.slice(0, 117)}...` : parsed.body;
     await createAdminClient().rpc("notify", {
       _user: ownerId,
       _type: "support.reply",
@@ -115,13 +115,13 @@ export async function adminReplySupportMessageAction(ownerId: string, raw: strin
       _body: preview,
       _link: "/contact",
     });
-    await sendUserPushAndEmail({
-      userId: ownerId,
-      title: "cintiQ Support replied",
-      body: preview,
-      link: "/contact",
-    }).catch(() => {});
   }
+  await sendUserPushAndEmail({
+    userId: ownerId,
+    title: "cintiQ Support replied to you",
+    body: `Our support team responded to your chat:\n\n"${parsed.body}"`,
+    link: "/contact",
+  }).catch(() => {});
 
   revalidatePath("/admin/support");
   return { ok: true, message: posted.message };
