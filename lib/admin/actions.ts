@@ -18,6 +18,71 @@ export async function initiateSettlementAction(orderId: string) {
   redirect(`/admin/settlements?${q}`);
 }
 
+export async function markManualSettlementAction(orderId: string, fd: FormData) {
+  const adminUser = await requireRole(["admin"]);
+  const transferRef = String(fd.get("transferRef") ?? "").trim().slice(0, 100);
+  if (transferRef.length < 3) {
+    redirect(`/admin/settlements?error=${encodeURIComponent("Enter a valid bank transfer reference (at least 3 characters).")}`);
+  }
+
+  const admin = createAdminClient();
+  const [{ data: order }, { data: comm }, { data: existing }] = await Promise.all([
+    admin.from("orders").select("id, seller_id, status").eq("id", orderId).maybeSingle(),
+    admin.from("commissions").select("seller_proceeds_kobo").eq("order_id", orderId).maybeSingle(),
+    admin.from("seller_settlements").select("status").eq("order_id", orderId).maybeSingle(),
+  ]);
+
+  if (!order || !comm) {
+    redirect(`/admin/settlements?error=${encodeURIComponent("Order or commission record not found.")}`);
+  }
+  if (order.status !== "completed") {
+    redirect(`/admin/settlements?error=${encodeURIComponent("Order must be completed before marking settled.")}`);
+  }
+  if (existing?.status === "settled") {
+    redirect(`/admin/settlements?done=${encodeURIComponent("Order is already marked settled.")}`);
+  }
+
+  const { error } = await admin.from("seller_settlements").upsert(
+    {
+      order_id: order.id,
+      seller_id: order.seller_id,
+      amount_kobo: comm.seller_proceeds_kobo,
+      provider: "manual_bank_transfer",
+      status: "settled",
+      provider_reference: transferRef,
+      failure_reason: null,
+      initiated_by: adminUser.id,
+      settled_at: new Date().toISOString(),
+    },
+    { onConflict: "order_id" },
+  );
+
+  if (error) {
+    redirect(`/admin/settlements?error=${encodeURIComponent("Could not record manual settlement.")}`);
+  }
+
+  await Promise.all([
+    admin.rpc("notify", {
+      _user: order.seller_id,
+      _type: "settlement.update",
+      _title: "Settlement sent",
+      _body: `Manual bank payout for order #${order.id.slice(0, 8)} (Ref: ${transferRef}) has been completed.`,
+      _link: "/seller/finance",
+    }),
+    admin.rpc("write_audit", {
+      _actor: adminUser.id,
+      _action: "settlement.manual",
+      _entity_type: "seller_settlement",
+      _entity_id: order.id,
+      _metadata: { reference: transferRef, amount_kobo: comm.seller_proceeds_kobo },
+    }),
+  ]);
+
+  revalidatePath("/admin/settlements");
+  revalidatePath("/seller/finance");
+  redirect(`/admin/settlements?done=${encodeURIComponent(`Marked order #${order.id.slice(0, 8)} as manually settled (${transferRef}).`)}`);
+}
+
 export async function processRefundAction(orderId: string, fd: FormData) {
   await requireRole(["admin"]);
   if (!isConfigured("PAYSTACK_SECRET_KEY")) {

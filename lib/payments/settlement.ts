@@ -165,7 +165,10 @@ export async function executeSellerSettlement(params: {
       providerReference: transfer.transfer_code,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Transfer failed";
+    const rawMsg = err instanceof Error ? err.message : "Transfer failed";
+    const msg = rawMsg.toLowerCase().includes("third party payouts")
+      ? `${rawMsg}. Paystack restricts Transfers on Starter/unverified accounts — request Transfers activation from Paystack Support or use Manual Bank Settlement below.`
+      : rawMsg;
     await upsertSettlement({ status: "failed", failure_reason: msg.slice(0, 300) });
     return { ok: false, status: "failed", message: msg };
   }

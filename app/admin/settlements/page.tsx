@@ -5,7 +5,7 @@ import { getPaystackBalance } from "@/lib/payments/paystack";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/form-parts";
 import { formatKobo } from "@/lib/utils";
-import { initiateSettlementAction, processRefundAction } from "@/lib/admin/actions";
+import { initiateSettlementAction, markManualSettlementAction, processRefundAction } from "@/lib/admin/actions";
 
 export const metadata = { title: "Settlements & refunds" };
 
@@ -44,6 +44,20 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
     const s = (o.seller_settlements as unknown as { status: string }[] | null)?.[0];
     return !s || s.status === "pending_provider" || s.status === "failed";
   });
+
+  const sellerIds = [...new Set(readyToSettle.map((o) => o.seller_id))];
+  const { data: sellerBanks } = sellerIds.length
+    ? await supabase
+        .from("seller_bank_accounts")
+        .select("user_id, bank_name, account_number, account_name, is_verified")
+        .in("user_id", sellerIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const bankBySeller = new Map<string, { bank_name: string; account_number: string; account_name: string; is_verified: boolean }>();
+  for (const b of sellerBanks ?? []) {
+    if (!bankBySeller.has(b.user_id)) bankBySeller.set(b.user_id, b);
+  }
 
   const totalEligibleKobo = readyToSettle.reduce((sum, o) => {
     const comm = (o.commissions as unknown as { seller_proceeds_kobo: number }[] | null)?.[0];
@@ -103,21 +117,43 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
               const comm = (o.commissions as unknown as { seller_proceeds_kobo: number }[] | null)?.[0];
               const proceedsKobo = comm?.seller_proceeds_kobo ?? o.total_kobo;
               const covered = ngnBalanceKobo === null || ngnBalanceKobo >= proceedsKobo;
+              const bank = bankBySeller.get(o.seller_id);
               return (
-                <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
-                  <div>
-                    <p className="font-medium">{seller?.store_name} · Order #{o.id.slice(0, 8)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Proceeds: {formatKobo(proceedsKobo)}
-                      {ngnBalanceKobo !== null && (
-                        <span className={`ml-2 font-medium ${covered ? "text-success" : "text-danger"}`}>
-                          · {covered ? "Covered by balance" : "Insufficient Paystack balance"}
-                        </span>
+                <li key={o.id} className="space-y-3 p-4 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{seller?.store_name} · Order #{o.id.slice(0, 8)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Proceeds: {formatKobo(proceedsKobo)}
+                        {ngnBalanceKobo !== null && (
+                          <span className={`ml-2 font-medium ${covered ? "text-success" : "text-danger"}`}>
+                            · {covered ? "Covered by balance" : "Insufficient Paystack balance"}
+                          </span>
+                        )}
+                      </p>
+                      {bank && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Payout bank: <strong className="text-foreground">{bank.account_name}</strong> · {bank.bank_name} ({bank.account_number})
+                          {bank.is_verified ? " · Verified" : ""}
+                        </p>
                       )}
-                    </p>
+                    </div>
+                    <form action={initiateSettlementAction.bind(null, o.id)}>
+                      <Button type="submit" variant="outline">Initiate Paystack transfer</Button>
+                    </form>
                   </div>
-                  <form action={initiateSettlementAction.bind(null, o.id)}>
-                    <Button type="submit" variant="outline">Initiate settlement</Button>
+                  <form action={markManualSettlementAction.bind(null, o.id)} className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+                    <input
+                      type="text"
+                      name="transferRef"
+                      required
+                      minLength={3}
+                      placeholder="Bank transfer reference (if paid manually)"
+                      className="h-9 min-w-[240px] flex-1 rounded-md border border-border bg-background px-3 text-xs"
+                    />
+                    <Button type="submit" variant="ghost" className="h-9 text-xs">
+                      Mark manually settled
+                    </Button>
                   </form>
                 </li>
               );
