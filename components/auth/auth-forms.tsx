@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import {
@@ -51,27 +52,35 @@ export function LoginForm() {
         ? "Email verification failed or the link expired."
         : null;
   return (
-    <form action={action} className="space-y-4" noValidate>
-      <input type="hidden" name="next" value={params.get("next") ?? ""} />
-      {registered && !state.message && (
-        <Banner state={{ ok: true, message: "Account created! Check your email to verify your account, then sign in." }} />
-      )}
-      {resetDone && !state.message && (
-        <Banner state={{ ok: true, message: "Password updated. Sign in with your new password." }} />
-      )}
-      {urlMsg && !state.message && <Banner state={{ ok: false, message: urlMsg }} />}
-      <Banner state={state} />
-      <Field label="Email" name="email" type="email" autoComplete="email" required error={state.fieldErrors?.email?.[0]} />
-      <div className="space-y-1.5">
-        <Field label="Password" name="password" type="password" autoComplete="current-password" required error={state.fieldErrors?.password?.[0]} />
-        <div className="text-right">
-          <Link href="/forgot-password" className="text-xs font-medium text-brand hover:underline">
-            Forgot password?
-          </Link>
-        </div>
+    <div className="space-y-4">
+      <GoogleAuthButton label="Sign in with Google" />
+      <div className="relative flex items-center py-1">
+        <span className="flex-1 border-t border-border" />
+        <span className="px-3 text-xs uppercase text-muted-foreground">or</span>
+        <span className="flex-1 border-t border-border" />
       </div>
-      <Submit pending={pending}>Sign in</Submit>
-    </form>
+      <form action={action} className="space-y-4" noValidate>
+        <input type="hidden" name="next" value={params.get("next") ?? ""} />
+        {registered && !state.message && (
+          <Banner state={{ ok: true, message: "Account created! Check your email to verify your account, then sign in." }} />
+        )}
+        {resetDone && !state.message && (
+          <Banner state={{ ok: true, message: "Password updated. Sign in with your new password." }} />
+        )}
+        {urlMsg && !state.message && <Banner state={{ ok: false, message: urlMsg }} />}
+        <Banner state={state} />
+        <Field label="Email" name="email" type="email" autoComplete="email" required error={state.fieldErrors?.email?.[0]} />
+        <div className="space-y-1.5">
+          <Field label="Password" name="password" type="password" autoComplete="current-password" required error={state.fieldErrors?.password?.[0]} />
+          <div className="text-right">
+            <Link href="/forgot-password" className="text-xs font-medium text-brand hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+        </div>
+        <Submit pending={pending}>Sign in</Submit>
+      </form>
+    </div>
   );
 }
 
@@ -79,14 +88,22 @@ export function RegisterForm() {
   const [state, action, pending] = useActionState(registerAction, initial);
   const e = state.fieldErrors ?? {};
   return (
-    <form action={action} className="space-y-4" noValidate>
-      <Banner state={state} />
-      <Field label="Full name" name="fullName" autoComplete="name" required error={e.fullName?.[0]} />
-      <Field label="Email" name="email" type="email" autoComplete="email" required error={e.email?.[0]} />
-      <Field label="Password" name="password" type="password" autoComplete="new-password" required error={e.password?.[0]} />
-      <Field label="Confirm password" name="confirmPassword" type="password" autoComplete="new-password" required error={e.confirmPassword?.[0]} />
-      <Submit pending={pending}>Create account</Submit>
-    </form>
+    <div className="space-y-4">
+      <GoogleAuthButton label="Sign up with Google" />
+      <div className="relative flex items-center py-1">
+        <span className="flex-1 border-t border-border" />
+        <span className="px-3 text-xs uppercase text-muted-foreground">or</span>
+        <span className="flex-1 border-t border-border" />
+      </div>
+      <form action={action} className="space-y-4" noValidate>
+        <Banner state={state} />
+        <Field label="Full name" name="fullName" autoComplete="name" required error={e.fullName?.[0]} />
+        <Field label="Email" name="email" type="email" autoComplete="email" required error={e.email?.[0]} />
+        <Field label="Password" name="password" type="password" autoComplete="new-password" required error={e.password?.[0]} />
+        <Field label="Confirm password" name="confirmPassword" type="password" autoComplete="new-password" required error={e.confirmPassword?.[0]} />
+        <Submit pending={pending}>Create account</Submit>
+      </form>
+    </div>
   );
 }
 
