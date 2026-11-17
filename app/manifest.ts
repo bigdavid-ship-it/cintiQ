@@ -12,6 +12,18 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     icons: [
       {
+        src: "/cintiq-logo.png",
+        sizes: "1024x1024",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/cintiq-logo.png",
+        sizes: "1024x1024",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      {
         src: "/icon.svg",
         sizes: "any",
         type: "image/svg+xml",

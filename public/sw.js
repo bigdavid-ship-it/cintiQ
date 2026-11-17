@@ -80,14 +80,21 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Native phone/desktop push notification handler
+// Native Android / iPhone / Desktop push notification handler
 self.addEventListener("push", (event) => {
-  const data = event.data ? event.data.json() : {};
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
   const title = data.title || "cintiQ";
   const options = {
     body: data.body || "You have a new update on cintiQ.",
-    icon: "/icon.svg",
-    badge: "/icon.svg",
+    icon: "/cintiq-logo.png",
+    badge: "/cintiq-logo.png",
+    tag: data.tag || `cintiq-${Date.now()}`,
+    renotify: true,
     data: { url: data.link || "/account/notifications" },
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -97,10 +104,12 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || "/account/notifications";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       for (const client of clients) {
         if ("focus" in client) {
-          client.navigate(targetUrl);
+          try {
+            if ("navigate" in client) await client.navigate(targetUrl);
+          } catch {}
           return client.focus();
         }
       }

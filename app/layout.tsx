@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   title: { default: "cintiQ – Your Campus. Your Marketplace.", template: "%s · cintiQ" },
   description: "Buy and sell with verified student entrepreneurs and local businesses around your university.",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/cintiq-logo.png", apple: "/cintiq-logo.png" },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "cintiQ" },
 };
 

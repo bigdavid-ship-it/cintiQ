@@ -151,8 +151,8 @@ export function NotificationBell({
               .then((reg) =>
                 reg.showNotification(incoming.title, {
                   body: incoming.body ?? "You have a new update on cintiQ.",
-                  icon: "/icon.svg",
-                  badge: "/icon.svg",
+                  icon: "/cintiq-logo.png",
+                  badge: "/cintiq-logo.png",
                   data: { url: incoming.link || "/account/notifications" },
                 }),
               )

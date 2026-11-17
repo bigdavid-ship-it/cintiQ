@@ -28,7 +28,16 @@ export async function sendUserPushAndEmail(params: {
   const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
   const fullLink = params.link && baseUrl ? `${baseUrl}${params.link}` : params.link;
 
-  // 1. Background Web Push
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("email, full_name")
+    .eq("id", params.userId)
+    .maybeSingle();
+
+  const firstName = profile?.full_name?.trim().split(/\s+/)[0];
+  const personalizedPushBody = firstName ? `Hi ${firstName}, ${params.body}` : params.body;
+
+  // 1. Background Web Push (Android & iPhone PWA)
   const vapid = getVapidConfig();
   if (vapid) {
     webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
@@ -38,8 +47,8 @@ export async function sendUserPushAndEmail(params: {
       .eq("user_id", params.userId);
 
     const payload = JSON.stringify({
-      title: params.title,
-      body: params.body,
+      title: `cintiQ · ${params.title}`,
+      body: personalizedPushBody,
       link: params.link || "/account/notifications",
     });
 
@@ -62,11 +71,6 @@ export async function sendUserPushAndEmail(params: {
 
   // 2. Branded, personalized Email / Gmail notification
   if (params.skipEmail) return;
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("email, full_name")
-    .eq("id", params.userId)
-    .maybeSingle();
 
   if (profile?.email) {
     await sendTransactionalEmail({
