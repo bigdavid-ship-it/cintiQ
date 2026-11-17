@@ -187,6 +187,14 @@ export async function setUserSuspendedAction(userId: string, suspend: boolean, f
     _reason: reason,
   });
   if (error) redirect(`/admin/users?error=${encodeURIComponent(error.message)}`);
+  await sendUserPushAndEmail({
+    userId,
+    title: suspend ? "Account suspended" : "Account reactivated",
+    body: suspend
+      ? reason || "Your cintiQ account has been suspended by an administrator."
+      : "Your cintiQ account has been reactivated.",
+    link: "/account",
+  }).catch(() => {});
   revalidatePath("/admin/users");
   redirect("/admin/users?done=1");
 }
